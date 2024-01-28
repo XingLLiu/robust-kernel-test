@@ -23,27 +23,24 @@ class WildBootstrap:
         # draw Rademacher rvs
         n = X.shape[-2]
         r = np.random.choice([-1, 1], size=(self.ndraws, n)) # b, n
-        # print("r", r)
-
-        # compute MMD
-        # print("1")
-        vstat = self.mmd.vstat(X, Y) # n, n
-        # print("2")
-        # print("ustat", ustat)
-
-        # compute bootstrap stats
-        # print("r", r.shape)
-        mask = np.expand_dims(r, -1) * np.expand_dims(r, -2) # b, n, n
-        # print("mask", mask)
-        # print("mask", mask.shape)
-        # print("3")
-        boot_stats_mat = mask * np.expand_dims(vstat, -3) # b, n, n
-        # print("boot_stats_mat", boot_stats_mat)
-        # print("4")
-        boot_stats = np.sum(boot_stats_mat, axis=(-2, -1)) / (n**2) # b
 
         # compute test stat
+        vstat = self.mmd.vstat(X, Y) # n, n
         test_stat = np.sum(vstat) / (n**2)
+
+        # compute bootstrap stats
+        mask = np.expand_dims(r, -1) * np.expand_dims(r, -2) # b, n, n
+
+        # matrix approach
+        # boot_stats_mat = mask * np.expand_dims(vstat, -3) # b, n, n
+        # boot_stats = np.sum(boot_stats_mat, axis=(-2, -1)) / (n**2) # b
+        
+        # vector approach
+        vstat_pd = np.expand_dims(vstat, -3) # 1, n, n
+        boot_stats = np.matmul(vstat, np.expand_dims(r, -1)) # b, n, 1
+        boot_stats = np.sum(np.squeeze(boot_stats, -1) * r, -1) / (n**2) # b
+
+        # print("boot_stats", boot_stats)
 
         return boot_stats, test_stat
 
