@@ -27,7 +27,7 @@ class WildBootstrap:
 
         # compute MMD
         # print("1")
-        ustat = self.mmd.ustat(X, Y) # n, n
+        vstat = self.mmd.vstat(X, Y) # n, n
         # print("2")
         # print("ustat", ustat)
 
@@ -37,13 +37,13 @@ class WildBootstrap:
         # print("mask", mask)
         # print("mask", mask.shape)
         # print("3")
-        boot_stats_mat = mask * np.expand_dims(ustat, -3) # b, n, n
+        boot_stats_mat = mask * np.expand_dims(vstat, -3) # b, n, n
         # print("boot_stats_mat", boot_stats_mat)
         # print("4")
-        boot_stats = np.sum(boot_stats_mat, axis=(-2, -1)) / (n * (n - 1)) # b
+        boot_stats = np.sum(boot_stats_mat, axis=(-2, -1)) / (n**2) # b
 
         # compute test stat
-        test_stat = np.sum(ustat) / (n * (n - 1))
+        test_stat = np.sum(vstat) / (n**2)
 
         return boot_stats, test_stat
 

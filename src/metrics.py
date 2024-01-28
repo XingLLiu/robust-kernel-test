@@ -31,16 +31,18 @@ class MMD(Metric):
         res = term1 + term2 - 2 * term3
         return res
     
-    def ustat(self, X, Y):
+    def vstat(self, X, Y):
         K_XX = self.kernel(X, X) # n, n
         K_YY = self.kernel(Y, Y) # m, m
         K_XY = self.kernel(X, Y) # n, m
 
         n, m = X.shape[-2], Y.shape[-2]
         assert n == m, "ustat is only valid when X and Y have the same sample size."
-        ustat = K_XX + K_YY - K_XY - K_XY.T # n, n
-        ustat_nodiag = ustat - np.diag(np.diag(ustat))
-        return ustat_nodiag
+        vstat = K_XX + K_YY - K_XY - K_XY.T # n, n
+        # ustat = vstat - np.diag(np.diag(vstat))
+        # return ustat
+
+        return vstat
 
     def test_threshold(self, n: int, alpha: float = 0.05, method: str = "deviation"):
         """
