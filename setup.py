@@ -20,7 +20,7 @@ setup(
     packages=find_packages(include=["src", "src.*"]),
 
     # See https://www.python.org/dev/peps/pep-0440/#version-specifiers
-    python_requires=">= 3.10",
+    python_requires=">= 3.8",
 
     # List run-time dependencies here.  These will be installed by pip when
     # your project is installed. For an analysis of "install_requires" vs pip's
@@ -31,8 +31,8 @@ setup(
         "pandas",
         "scipy",
         "matplotlib",
-        "jupyter",
-        "sklearn",
+        "jupyter>=7.0",
+        "scikit-learn",
         "tqdm",
         "seaborn"
     ]

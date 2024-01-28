@@ -5,6 +5,53 @@ class Metric:
 
     def __call__(self, X, Y):
         raise NotImplementedError
+    
+
+class MMD(Metric):
+
+    def __init__(self, kernel):
+        self.kernel = kernel
+    
+    def __call__(self, X, Y):
+        """
+        @param X: numpy array of shape (n, d)
+        @param Y: numpy array of shape (m, d)
+
+        @return: numpy array of shape (1,)
+        """
+        K_XX = self.kernel(X, X) # n, n
+        K_YY = self.kernel(Y, Y) # m, m
+        K_XY = self.kernel(X, Y) # n, m
+
+        n, m = X.shape[-2], Y.shape[-2]
+        term1 = np.sum(K_XX) / (n * (n-1))
+        term2 = np.sum(K_YY) / (m * (m-1))
+        term3 = np.sum(K_XY) / (n * m)
+        
+        res = term1 + term2 - 2 * term3
+        return res
+    
+    def ustat(self, X, Y):
+        K_XX = self.kernel(X, X) # n, n
+        K_YY = self.kernel(Y, Y) # m, m
+        K_XY = self.kernel(X, Y) # n, m
+
+        n, m = X.shape[-2], Y.shape[-2]
+        assert n == m, "ustat is only valid when X and Y have the same sample size."
+        ustat = K_XX + K_YY - K_XY - K_XY.T # n, n
+        ustat_nodiag = ustat - np.diag(np.diag(ustat))
+        return ustat_nodiag
+
+    def test_threshold(self, n: int, alpha: float = 0.05, method: str = "deviation"):
+        """
+        Compute the threshold for the MMD test.
+        """
+        if method == "deviation":
+            # only valid when n == m
+            K = self.kernel.UB()
+            threshold = np.sqrt(2 * K / n) * (1 + np.sqrt(- np.log(alpha)))
+
+        return threshold
 
 
 class PairwiseNorm(Metric):
