@@ -29,9 +29,9 @@ class WildBootstrap:
         test_stat = np.sum(vstat) / (n**2)
 
         # compute bootstrap stats
-        mask = np.expand_dims(r, -1) * np.expand_dims(r, -2) # b, n, n
 
         # matrix approach
+        # mask = np.expand_dims(r, -1) * np.expand_dims(r, -2) # b, n, n
         # boot_stats_mat = mask * np.expand_dims(vstat, -3) # b, n, n
         # boot_stats = np.sum(boot_stats_mat, axis=(-2, -1)) / (n**2) # b
         
