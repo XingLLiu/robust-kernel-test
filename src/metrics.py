@@ -39,12 +39,9 @@ class MMD(Metric):
         n, m = X.shape[-2], Y.shape[-2]
         assert n == m, "ustat is only valid when X and Y have the same sample size."
         vstat = K_XX + K_YY - K_XY - K_XY.T # n, n
-        # ustat = vstat - np.diag(np.diag(vstat))
-        # return ustat
-
         return vstat
 
-    def test_threshold(self, n: int, alpha: float = 0.05, method: str = "deviation"):
+    def test_threshold(self, n: int, alpha: float = 0.05, method: str = "deviation", eps: float = None):
         """
         Compute the threshold for the MMD test.
         """
@@ -52,6 +49,14 @@ class MMD(Metric):
             # only valid when n == m
             K = self.kernel.UB()
             threshold = np.sqrt(2 * K / n) * (1 + np.sqrt(- np.log(alpha)))
+
+        elif method == "deviation_robust":
+            # only valid when n == m
+            assert eps is not None, "eps must be provided."
+            assert eps < alpha, "eps must be less than test level."
+            K = self.kernel.UB()
+            alpha_p = (alpha - eps) / (1 - eps)
+            threshold = np.sqrt(2 * K / n) * (1 + np.sqrt(- np.log(alpha_p / 2)))
 
         return threshold
 
