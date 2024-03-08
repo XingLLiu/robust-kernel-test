@@ -28,6 +28,7 @@ setup(
     # https://packaging.python.org/en/latest/requirements.html
     install_requires=[
         "numpy",
+        "jax[cpu]",
         "pandas",
         "scipy",
         "matplotlib",

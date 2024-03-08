@@ -61,6 +61,100 @@ class MMD(Metric):
         return threshold
 
 
+class KSD(Metric):
+  def __init__(
+    self,
+    kernel,
+    score_fn: callable = None,
+    log_prob: callable = None,
+  ):
+    """
+    Inputs:
+        target (tfp.distributions.Distribution): Only require the log_probability of the target distribution e.g. unnormalised posterior distribution
+        kernel (tf.nn.Module): [description]
+        optimizer (tf.optim.Optimizer): [description]
+    """
+    self.k = kernel
+    assert score_fn is not None or log_prob is not None, "Either score_fn or log_prob must be provided."
+    self.score_fn = score_fn
+    self.log_prob = log_prob
+
+  def __call__(self, X: np.array, Y: np.array, **kwargs):
+    return self.u_p(X, Y, **kwargs)
+  
+  def vstat(self, X: np.array, Y: np.array, output_dim: int = 2):
+    return self.u_p(X, Y, output_dim=output_dim, vstat=True)
+
+  def u_p(self, X: np.array, Y: np.array, output_dim: int = 1, vstat: bool = False):
+    """
+    Inputs:
+      X: (..., n, dim)
+      Y: (..., m, dim)
+    """
+    # # copy data for score computation
+    # X_cp = tf.identity(X)
+    # Y_cp = tf.identity(Y)
+
+    # calculate scores using autodiff
+    if self.score_fn is None:
+       raise NotImplementedError("score_fn is not provided.")
+    #   with tf.GradientTape() as g:
+    #     g.watch(X_cp)
+    #     log_prob_X = self.log_prob(X_cp)
+    #   score_X = g.gradient(log_prob_X, X_cp) # n x dim
+    #   with tf.GradientTape() as g:
+    #     g.watch(Y_cp)
+    #     log_prob_Y = self.log_prob(Y_cp) # m x dim
+    #   score_Y = g.gradient(log_prob_Y, Y_cp)
+    else:
+      score_X = self.score_fn(X) # n x dim
+      score_Y = self.score_fn(Y) # m x dim
+      assert score_X.shape == X.shape
+
+    # median heuristic
+    if self.k.med_heuristic:
+      self.k.bandwidth(X, Y)
+
+    # kernel
+    K_XY = self.k(X, Y) # n x m
+
+    # term 1
+    term1_mat = np.matmul(score_X, score_Y.T) * K_XY # n x m
+    # term 2
+    grad_K_Y = self.k.grad_second(X, Y) # n x m x dim
+    term2_mat = np.expand_dims(score_X, -2) * grad_K_Y # n x m x dim
+    term2_mat = np.sum(term2_mat, axis=-1)
+
+    # term3
+    grad_K_X = self.k.grad_first(X, Y) # n x m x dim
+    term3_mat = np.expand_dims(score_Y, -3) * grad_K_X # n x m x dim
+    term3_mat = np.sum(term3_mat, axis=-1)
+
+    # term4
+    term4_mat = self.k.gradgrad(X, Y) # n x m
+
+    assert term1_mat.shape[-2:] == (X.shape[-2], Y.shape[-2])
+    assert term2_mat.shape[-2:] == (X.shape[-2], Y.shape[-2])
+    assert term3_mat.shape[-2:] == (X.shape[-2], Y.shape[-2])
+    assert term4_mat.shape[-2:] == (X.shape[-2], Y.shape[-2]), term4_mat.shape
+    
+    u_p = term1_mat + term2_mat + term3_mat + term4_mat
+
+    if not vstat:
+        # extract diagonal
+        u_p = np.fill_diagonal(u_p, 0.)
+        denom = (X.shape[-2] * (Y.shape[-2]-1))
+    else:
+        denom = (X.shape[-2] * Y.shape[-2])
+
+    if output_dim == 1:
+        ksd = np.sum(u_p, axis=(-1, -2)) / denom
+        return ksd
+    
+    elif output_dim == 2:
+        return u_p
+    
+
 class PairwiseNorm(Metric):
 
     def __init__(self, p: int = 2, pow = 1.):

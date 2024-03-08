@@ -7,11 +7,17 @@ def l2norm(X, Y):
         X: Tensors of shape (..., n, dim)
         Y: Tensors of shape (..., m, dim)
     """
-    XY = np.matmul(X, Y.T) # n x m
-    XX = np.matmul(X, X.T)
-    XX = np.expand_dims(np.diag(XX), axis=-1) # n x 1
-    YY = np.matmul(Y, Y.T)
-    YY = np.expand_dims(np.diag(YY), axis=-2) # 1 x m
+    # XY = np.matmul(X, Y.T) # n x m
+    # XX = np.matmul(X, X.T)
+    # XX = np.expand_dims(np.diag(XX), axis=-1) # n x 1
+    # YY = np.matmul(Y, Y.T)
+    # YY = np.expand_dims(np.diag(YY), axis=-2) # 1 x m
+
+    XY = np.matmul(X, np.moveaxis(Y, (-1, -2), (-2, -1))) # n x m
+    XX = np.matmul(X, np.moveaxis(X, (-1, -2), (-2, -1)))
+    XX = np.expand_dims(np.diagonal(XX, axis1=-2, axis2=-1), axis=-1) # n x 1
+    YY = np.matmul(Y, np.moveaxis(Y, (-1, -2), (-2, -1)))
+    YY = np.expand_dims(np.diagonal(YY, axis1=-2, axis2=-1), axis=-2) # 1 x m
 
     dnorm2 = -2 * XY + XX + YY
     return dnorm2

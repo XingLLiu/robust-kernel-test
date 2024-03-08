@@ -1,14 +1,43 @@
 import numpy as np
+from tqdm import tqdm
 
 
-class WildBootstrap:
+class Bootstrap:
 
-    def __init__(self, mmd, ndraws: int = 1000):
+    def __init__(self, divergence, ndraws: int = 1000):
         """
         @param mmd: MMD object
         @param ndraws: number of bootstrap draws
         """
-        self.mmd = mmd
+        self.divergence = divergence
+        self.ndraws = ndraws
+
+    def compute_bootstrap(self, X, Y):
+        raise NotImplementedError
+
+    def pval(self, X, Y, return_boot: bool = False):
+        """
+        Compute the p-value for the MMD test.
+
+        @param X: numpy array of shape (n, d)
+        @param Y: numpy array of shape (m, d)
+        """
+        boot_stats, test_stat = self.compute_bootstrap(X, Y)
+        pval = (1. + np.sum(boot_stats > test_stat)) / (self.ndraws + 1)
+        if not return_boot:
+            return pval
+        else:
+            return pval, boot_stats
+
+
+class WildBootstrap(Bootstrap):
+
+    def __init__(self, divergence, ndraws: int = 1000):
+        """
+        @param mmd: MMD object
+        @param ndraws: number of bootstrap draws
+        """
+        self.divergence = divergence
         self.ndraws = ndraws
 
     def compute_bootstrap(self, X, Y):
@@ -25,7 +54,7 @@ class WildBootstrap:
         r = np.random.choice([-1, 1], size=(self.ndraws, n)) # b, n
 
         # compute test stat
-        vstat = self.mmd.vstat(X, Y) # n, n
+        vstat = self.divergence.vstat(X, Y) # n, n
         test_stat = np.sum(vstat) / (n**2)
 
         # compute bootstrap stats
@@ -43,16 +72,19 @@ class WildBootstrap:
 
         return boot_stats, test_stat
 
-    def pval(self, X, Y):
-        """
-        Compute the p-value for the MMD test.
+    # def pval(self, X, Y, return_boot: bool = False):
+    #     """
+    #     Compute the p-value for the MMD test.
 
-        @param X: numpy array of shape (n, d)
-        @param Y: numpy array of shape (m, d)
-        """
-        boot_stats, test_stat = self.compute_bootstrap(X, Y)
-        pval = (1. + np.sum(boot_stats > test_stat)) / (self.ndraws + 1)
-        return pval
+    #     @param X: numpy array of shape (n, d)
+    #     @param Y: numpy array of shape (m, d)
+    #     """
+    #     boot_stats, test_stat = self.compute_bootstrap(X, Y)
+    #     pval = (1. + np.sum(boot_stats > test_stat)) / (self.ndraws + 1)
+    #     if not return_boot:
+    #         return pval
+    #     else:
+    #         return pval, boot_stats
 
 
 class RobustMMDTest(object):
@@ -87,3 +119,50 @@ class RobustMMDTest(object):
 
         res = float(test_stat > threshold)
         return res
+
+
+class EfronBootstrap(Bootstrap):
+
+    def __init__(self, divergence, ndraws: int = 1000):
+        """
+        @param mmd: MMD object
+        @param ndraws: number of bootstrap draws
+        """
+        self.divergence = divergence
+        self.ndraws = ndraws
+
+    def compute_bootstrap(self, X, Y: np.ndarray = None, subsize: int = None):
+        """
+        Compute the threshold for the MMD test.
+
+        @param X: numpy array of shape (n, d)
+        @param Y: numpy array of shape (m, d). If not, one-sample testing is used.
+        """
+        assert len(X.shape) == 2, "X cannot be batched."
+
+        if Y is not None:
+            assert X.shape[-2] == Y.shape[-2], "X and Y must have the same sample size."
+            assert len(Y.shape) == 2, "Y cannot be batched."
+
+        # compute test stat
+        YY = Y if Y is not None else X
+        test_stat = self.divergence.vstat(X, YY, output_dim=1) # n, n
+        
+        # generate bootstrap samples
+        subsize = subsize if subsize is not None else X.shape[-2]
+        idx = np.random.choice(X.shape[-2], size=(self.ndraws, subsize), replace=True) # b, n
+        Xs = X[idx] # b, n, d
+        assert Xs.shape == (self.ndraws, X.shape[-2], X.shape[-1]), "Xs shape is wrong."
+        if Y is None:
+            print("one-sample")
+            Ys = Xs
+        else:
+            print("two-sample")
+            Ys = np.repeat(Y[np.newaxis], self.ndraws, axis=0) # b, n, d
+
+        # compute bootstrap stat
+        boot_stats = []
+        for X, Y in tqdm(zip(Xs, Ys), total=self.ndraws):
+            boot_stats.append(self.divergence.vstat(X, Y, output_dim=1))
+
+        return boot_stats, test_stat
