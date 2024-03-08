@@ -1,5 +1,5 @@
 import numpy as np
-from tqdm import tqdm
+from tqdm import tqdm, trange
 
 
 class Bootstrap:
@@ -161,6 +161,16 @@ class EfronBootstrap(Bootstrap):
             Ys = np.repeat(Y[np.newaxis], self.ndraws, axis=0) # b, n, d
 
         # compute bootstrap stat
+        # 1. compute in a batch
+        # boot_stats = self.divergence.vstat(Xs, Ys, output_dim=1) # b
+        # 2. compute in minibatches
+        # boot_stats = []
+        # nsub = 100
+        # for i in trange(int(np.ceil(self.ndraws / nsub))):
+        #     i1, i2 = i * nsub, (i + 1) * nsub
+        #     boot_stats.append(self.divergence.vstat(Xs[i1:i2], Ys[i1:i2], output_dim=1))
+        # boot_stats = np.concatenate(boot_stats)
+        # 3. compute sequentially
         boot_stats = []
         for X, Y in tqdm(zip(Xs, Ys), total=self.ndraws):
             boot_stats.append(self.divergence.vstat(X, Y, output_dim=1))

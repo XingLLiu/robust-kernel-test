@@ -119,7 +119,7 @@ class KSD(Metric):
     K_XY = self.k(X, Y) # n x m
 
     # term 1
-    term1_mat = np.matmul(score_X, score_Y.T) * K_XY # n x m
+    term1_mat = np.matmul(score_X, np.moveaxis(score_Y, (-1, -2), (-2, -1))) * K_XY # n x m
     # term 2
     grad_K_Y = self.k.grad_second(X, Y) # n x m x dim
     term2_mat = np.expand_dims(score_X, -2) * grad_K_Y # n x m x dim
@@ -142,7 +142,7 @@ class KSD(Metric):
 
     if not vstat:
         # extract diagonal
-        u_p = np.fill_diagonal(u_p, 0.)
+        u_p = np.fill_diagonal(u_p, 0.) #TODO make this batchable
         denom = (X.shape[-2] * (Y.shape[-2]-1))
     else:
         denom = (X.shape[-2] * Y.shape[-2])
