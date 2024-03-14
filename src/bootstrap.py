@@ -15,7 +15,7 @@ class Bootstrap:
     def compute_bootstrap(self, X, Y):
         raise NotImplementedError
 
-    def pval(self, X, Y, return_boot: bool = False):
+    def pval(self, X, Y: np.array = None, return_boot: bool = False):
         """
         Compute the p-value for the MMD test.
 
@@ -146,18 +146,21 @@ class EfronBootstrap(Bootstrap):
 
         # compute test stat
         YY = Y if Y is not None else X
-        test_stat = self.divergence.vstat(X, YY, output_dim=1) # n, n
-        
+        n = X.shape[-2]
+        vstat = self.divergence.vstat(X, YY) # n, n
+        test_stat = np.sum(vstat) / (n**2)
+
         # generate bootstrap samples
-        subsize = subsize if subsize is not None else X.shape[-2]
-        idx = np.random.choice(X.shape[-2], size=(self.ndraws, subsize), replace=True) # b, n
+        subsize = subsize if subsize is not None else n
+        idx = np.random.choice(n, size=(self.ndraws, subsize), replace=True) # b, n
         Xs = X[idx] # b, n, d
-        assert Xs.shape == (self.ndraws, X.shape[-2], X.shape[-1]), "Xs shape is wrong."
+        assert Xs.shape == (self.ndraws, n, X.shape[-1]), "Xs shape is wrong."
         if Y is None:
-            print("one-sample")
+            # print("one-sample")
             Ys = Xs
         else:
-            print("two-sample")
+            # print("two-sample")
+            raise ValueError("Two-sample testing is not supported")
             Ys = np.repeat(Y[np.newaxis], self.ndraws, axis=0) # b, n, d
 
         # compute bootstrap stat
@@ -171,8 +174,23 @@ class EfronBootstrap(Bootstrap):
         #     boot_stats.append(self.divergence.vstat(Xs[i1:i2], Ys[i1:i2], output_dim=1))
         # boot_stats = np.concatenate(boot_stats)
         # 3. compute sequentially
+        # boot_stats = []
+        # for X, Y in tqdm(zip(Xs, Ys), total=self.ndraws):
+        #     boot_stats.append(self.divergence.vstat(X, Y, output_dim=1))
+        # 4. work with the stat matrix directly
         boot_stats = []
-        for X, Y in tqdm(zip(Xs, Ys), total=self.ndraws):
-            boot_stats.append(self.divergence.vstat(X, Y, output_dim=1))
+        ii1_ls, ii2_ls = [], []        
+        # for ii in tqdm(idx):
+        for ii in idx:
+            ii1, ii2 = np.meshgrid(ii, ii, indexing="ij")
+            ii1_ls.append(ii1)
+            ii2_ls.append(ii2)
+        
+        ii1 = np.stack(ii1_ls, axis=0) # b, n, n
+        ii2 = np.stack(ii2_ls, axis=0) # b, n, n
+        vstat_boot = vstat[ii1, ii2] # b, n, n
+        boot_stats = np.sum(vstat_boot, axis=(-1, -2)) / (ii1.shape[-1]**2)
+            
+        # boot_stats = list(map(lambda j: np.sum(vstat[ii1_ls[j], ii2_ls[j]]) / n**2, range(len(ii1_ls))))
 
         return boot_stats, test_stat

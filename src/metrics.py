@@ -60,6 +60,14 @@ class MMD(Metric):
 
         return threshold
 
+    def reverse_test(self, X, Y, theta: float, alpha: float = 0.05):
+
+        mmd = self(X, Y)
+        n = X.shape[-2]
+        threshold = self.test_threshold(n, alpha)
+        res = float(max(0, theta - mmd) > threshold)
+        return res
+
 
 class KSD(Metric):
   def __init__(
@@ -142,7 +150,7 @@ class KSD(Metric):
 
     if not vstat:
         # extract diagonal
-        u_p = np.fill_diagonal(u_p, 0.) #TODO make this batchable
+        np.fill_diagonal(u_p, 0.) #TODO make this batchable
         denom = (X.shape[-2] * (Y.shape[-2]-1))
     else:
         denom = (X.shape[-2] * Y.shape[-2])
