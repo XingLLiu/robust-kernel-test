@@ -213,3 +213,113 @@ class IMQ(object):
         ) * np.pow(K, self.beta-2) # n x m
 
         return gradgrad_tr
+
+
+class TiltedKernel(object):
+
+    def __init__(self, kernel, weight_fn):
+        super().__init__()
+        self.kernel = kernel
+        self.weight_fn = weight_fn
+        self.med_heuristic = None
+
+    def __call__(self, X, Y):
+        """
+        Args:
+            X: tf.Tensor of shape (..., n, dim)
+            Y: tf.Tensor of shape (..., m, dim)
+        Output:
+            tf.Tensor of shape (..., n, m)
+        """
+        K_XY = self.kernel(X, Y) # n, m
+        W_X = self.weight_fn(X) # n
+        W_Y = self.weight_fn(Y) # m
+        res = np.expand_dims(W_X, -1) * K_XY * np.expand_dims(W_Y, -2) # n, m
+        return res
+
+    def grad_first(self, X, Y):
+        """
+        Compute grad_K in wrt first argument in matrix form 
+        """
+        K = self.kernel(X, Y)
+        W_X = self.weight_fn(X)
+        W_Y = self.weight_fn(Y)
+        grad_K_XY = self.kernel.grad_first(X, Y)
+        grad_W_X = self.weight_fn.grad(X) # n, d
+        W_Y_pd = np.expand_dims(np.expand_dims(W_Y, -2), -1) # 1, m, 1
+
+        term1 = np.expand_dims(grad_W_X, -2) * np.expand_dims(K, -1) * W_Y_pd # n, m, d
+        term2 = W_X[..., np.newaxis, np.newaxis] * grad_K_XY * W_Y_pd # n, m, d
+
+        return term1 + term2
+
+    def grad_second(self, X, Y):
+        """
+        Compute grad_K in wrt second argument in matrix form.
+        Args:
+            X: tf.Tensor of shape (..., n, dim)
+            Y: tf.Tensor of shape (..., m, dim)
+        Output:
+            tf.Tensor of shape (..., n, m, dim)
+        """
+        K = self.kernel(X, Y)
+        W_X = self.weight_fn(X)
+        W_Y = self.weight_fn(Y)
+        grad_K_XY = self.kernel.grad_second(X, Y) # n, m, d
+        grad_W_Y = self.weight_fn.grad(Y) # m, d
+        W_X_pd = W_X[..., np.newaxis, np.newaxis] # n, 1, 1
+
+        term1 = W_X_pd * grad_K_XY * np.expand_dims(
+            np.expand_dims(W_Y, -2), -1
+        ) # n, m, d
+        term2 = W_X_pd * np.expand_dims(K, -1) * np.expand_dims(grad_W_Y, -3) # n, m, d
+        return term1 + term2
+
+    def gradgrad(self, X, Y):
+        """
+        Compute trace(\nabla_x \nabla_y k(x, y)).
+        """
+        K = self.kernel(X, Y)
+        grad_K_X = self.kernel.grad_first(X, Y) # n, m, d
+        grad_K_Y = self.kernel.grad_second(X, Y) # n, m, d
+        gradgrad_K = self.kernel.gradgrad(X, Y) # n, m
+        
+        W_X = self.weight_fn(X)
+        W_X_pd = np.expand_dims(W_X, -1) # n, 1
+        W_Y = self.weight_fn(Y)
+        W_Y_pd = np.expand_dims(W_Y, -2) # 1, m
+
+        grad_W_X = self.weight_fn.grad(X) # n, d
+        grad_W_X_pd = np.expand_dims(grad_W_X, -2) # n, 1, d
+        grad_W_Y = self.weight_fn.grad(Y) # m, d
+        grad_W_Y_pd = np.expand_dims(grad_W_Y, -3) # 1, m, d
+
+        term1 = np.sum(grad_W_X_pd * grad_K_Y, -1) * W_Y_pd # n, m
+        term2 = W_X * gradgrad_K * W_Y_pd # n, m
+        term3 = np.sum(grad_W_X_pd * grad_W_Y_pd, -1) * K # n, m
+        term4 = W_X_pd * np.sum(grad_K_X * grad_W_Y_pd, -1) # n, m
+
+        return term1 + term2 + term3 + term4
+
+
+class ScoreWeightFunction(object):
+
+    def __init__(self, score_fn, b = 0.5):
+        self.score_fn = score_fn
+        self.b = b
+        assert self.b >= 0.5
+
+    def __call__(self, X):
+        score = self.score_fn(X) # n, d
+        score_norm_sq = np.sum(score**2, -1) # n
+        return np.power(1 + score_norm_sq, -self.b) # n
+
+    def grad(self, X):
+        score = self.score_fn(X) # n, d
+        score_norm_sq = np.sum(score**2, -1)
+
+        res = np.expand_dims(
+            -2 * self.b * np.power(1 + score_norm_sq, -self.b - 1),
+            -1,
+        ) * score # n, d
+        return res
