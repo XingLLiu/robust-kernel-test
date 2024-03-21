@@ -60,108 +60,123 @@ class MMD(Metric):
 
         return threshold
 
-    def reverse_test(self, X, Y, theta: float, alpha: float = 0.05):
+    def reverse_test(self, X, Y, theta: float, alpha: float = 0.05, method = "deviation"):
 
         mmd = self(X, Y)
         n = X.shape[-2]
-        threshold = self.test_threshold(n, alpha)
-        res = float(max(0, theta - mmd) > threshold)
+        threshold = self.test_threshold(n, alpha, method=method)
+        res = float(max(0, theta - mmd**0.5) > threshold)
         return res
 
 
 class KSD(Metric):
-  def __init__(
-    self,
-    kernel,
-    score_fn: callable = None,
-    log_prob: callable = None,
-  ):
-    """
-    Inputs:
-        target (tfp.distributions.Distribution): Only require the log_probability of the target distribution e.g. unnormalised posterior distribution
-        kernel (tf.nn.Module): [description]
-        optimizer (tf.optim.Optimizer): [description]
-    """
-    self.k = kernel
-    assert score_fn is not None or log_prob is not None, "Either score_fn or log_prob must be provided."
-    self.score_fn = score_fn
-    self.log_prob = log_prob
+    def __init__(
+        self,
+        kernel,
+        score_fn: callable = None,
+        log_prob: callable = None,
+    ):
+        """
+        Inputs:
+            target (tfp.distributions.Distribution): Only require the log_probability of the target distribution e.g. unnormalised posterior distribution
+            kernel (tf.nn.Module): [description]
+            optimizer (tf.optim.Optimizer): [description]
+        """
+        self.k = kernel
+        assert score_fn is not None or log_prob is not None, "Either score_fn or log_prob must be provided."
+        self.score_fn = score_fn
+        self.log_prob = log_prob
 
-  def __call__(self, X: np.array, Y: np.array, **kwargs):
-    return self.u_p(X, Y, **kwargs)
-  
-  def vstat(self, X: np.array, Y: np.array, output_dim: int = 2):
-    return self.u_p(X, Y, output_dim=output_dim, vstat=True)
+    def __call__(self, X: np.array, Y: np.array, **kwargs):
+        return self.u_p(X, Y, **kwargs)
 
-  def u_p(self, X: np.array, Y: np.array, output_dim: int = 1, vstat: bool = False):
-    """
-    Inputs:
-      X: (..., n, dim)
-      Y: (..., m, dim)
-    """
-    # # copy data for score computation
-    # X_cp = tf.identity(X)
-    # Y_cp = tf.identity(Y)
+    def vstat(self, X: np.array, Y: np.array, output_dim: int = 2):
+        return self.u_p(X, Y, output_dim=output_dim, vstat=True)
 
-    # calculate scores using autodiff
-    if self.score_fn is None:
-       raise NotImplementedError("score_fn is not provided.")
-    #   with tf.GradientTape() as g:
-    #     g.watch(X_cp)
-    #     log_prob_X = self.log_prob(X_cp)
-    #   score_X = g.gradient(log_prob_X, X_cp) # n x dim
-    #   with tf.GradientTape() as g:
-    #     g.watch(Y_cp)
-    #     log_prob_Y = self.log_prob(Y_cp) # m x dim
-    #   score_Y = g.gradient(log_prob_Y, Y_cp)
-    else:
-      score_X = self.score_fn(X) # n x dim
-      score_Y = self.score_fn(Y) # m x dim
-      assert score_X.shape == X.shape
+    def u_p(self, X: np.array, Y: np.array, output_dim: int = 1, vstat: bool = False):
+        """
+        Inputs:
+            X: (..., n, dim)
+            Y: (..., m, dim)
+        """
+        # # copy data for score computation
+        # X_cp = tf.identity(X)
+        # Y_cp = tf.identity(Y)
 
-    # median heuristic
-    if self.k.med_heuristic:
-      self.k.bandwidth(X, Y)
+        # calculate scores using autodiff
+        if self.score_fn is None:
+            raise NotImplementedError("score_fn is not provided.")
+        #   with tf.GradientTape() as g:
+        #     g.watch(X_cp)
+        #     log_prob_X = self.log_prob(X_cp)
+        #   score_X = g.gradient(log_prob_X, X_cp) # n x dim
+        #   with tf.GradientTape() as g:
+        #     g.watch(Y_cp)
+        #     log_prob_Y = self.log_prob(Y_cp) # m x dim
+        #   score_Y = g.gradient(log_prob_Y, Y_cp)
+        else:
+            score_X = self.score_fn(X) # n x dim
+            score_Y = self.score_fn(Y) # m x dim
+            assert score_X.shape == X.shape
 
-    # kernel
-    K_XY = self.k(X, Y) # n x m
+        # median heuristic
+        if self.k.med_heuristic:
+            self.k.bandwidth(X, Y)
 
-    # term 1
-    term1_mat = np.matmul(score_X, np.moveaxis(score_Y, (-1, -2), (-2, -1))) * K_XY # n x m
-    # term 2
-    grad_K_Y = self.k.grad_second(X, Y) # n x m x dim
-    term2_mat = np.expand_dims(score_X, -2) * grad_K_Y # n x m x dim
-    term2_mat = np.sum(term2_mat, axis=-1)
+        # kernel
+        K_XY = self.k(X, Y) # n x m
 
-    # term3
-    grad_K_X = self.k.grad_first(X, Y) # n x m x dim
-    term3_mat = np.expand_dims(score_Y, -3) * grad_K_X # n x m x dim
-    term3_mat = np.sum(term3_mat, axis=-1)
+        # term 1
+        term1_mat = np.matmul(score_X, np.moveaxis(score_Y, (-1, -2), (-2, -1))) * K_XY # n x m
+        # term 2
+        grad_K_Y = self.k.grad_second(X, Y) # n x m x dim
+        term2_mat = np.expand_dims(score_X, -2) * grad_K_Y # n x m x dim
+        term2_mat = np.sum(term2_mat, axis=-1)
 
-    # term4
-    term4_mat = self.k.gradgrad(X, Y) # n x m
+        # term3
+        grad_K_X = self.k.grad_first(X, Y) # n x m x dim
+        term3_mat = np.expand_dims(score_Y, -3) * grad_K_X # n x m x dim
+        term3_mat = np.sum(term3_mat, axis=-1)
 
-    assert term1_mat.shape[-2:] == (X.shape[-2], Y.shape[-2])
-    assert term2_mat.shape[-2:] == (X.shape[-2], Y.shape[-2])
-    assert term3_mat.shape[-2:] == (X.shape[-2], Y.shape[-2])
-    assert term4_mat.shape[-2:] == (X.shape[-2], Y.shape[-2]), term4_mat.shape
-    
-    u_p = term1_mat + term2_mat + term3_mat + term4_mat
+        # term4
+        term4_mat = self.k.gradgrad(X, Y) # n x m
 
-    if not vstat:
-        # extract diagonal
-        np.fill_diagonal(u_p, 0.) #TODO make this batchable
-        denom = (X.shape[-2] * (Y.shape[-2]-1))
-    else:
-        denom = (X.shape[-2] * Y.shape[-2])
+        assert term1_mat.shape[-2:] == (X.shape[-2], Y.shape[-2])
+        assert term2_mat.shape[-2:] == (X.shape[-2], Y.shape[-2])
+        assert term3_mat.shape[-2:] == (X.shape[-2], Y.shape[-2])
+        assert term4_mat.shape[-2:] == (X.shape[-2], Y.shape[-2]), term4_mat.shape
 
-    if output_dim == 1:
-        ksd = np.sum(u_p, axis=(-1, -2)) / denom
-        return ksd
-    
-    elif output_dim == 2:
-        return u_p
-    
+        u_p = term1_mat + term2_mat + term3_mat + term4_mat
+
+        if not vstat:
+            # extract diagonal
+            np.fill_diagonal(u_p, 0.) #TODO make this batchable
+            denom = (X.shape[-2] * (Y.shape[-2]-1))
+        else:
+            denom = (X.shape[-2] * Y.shape[-2])
+
+        if output_dim == 1:
+            ksd = np.sum(u_p, axis=(-1, -2)) / denom
+            return ksd
+
+        elif output_dim == 2:
+            return u_p
+
+    def test_threshold(self, n: int, alpha: float = 0.05, method: str = "deviation"):
+        """
+        Compute the threshold for the MMD test.
+        """
+        if method == "deviation":
+            h_zero, gradgrad_h_zero = self.k.kernel.eval_zero()
+            ws_sup = self.k.weight_fn.weighted_score_sup
+            m_sup = self.k.weight_fn.sup
+            grad_m_sup = self.k.weight_fn.derivative_sup
+            tau = (ws_sup**2 + 2 * ws_sup * grad_m_sup + grad_m_sup**2) * h_zero + m_sup**2 * gradgrad_h_zero
+            self.tau = tau
+
+            threshold = tau / n + np.sqrt(- 2 * tau**2 * np.log(alpha) / n)
+
+        return threshold
 
 class PairwiseNorm(Metric):
 

@@ -15,7 +15,7 @@ class Bootstrap:
     def compute_bootstrap(self, X, Y):
         raise NotImplementedError
 
-    def pval(self, X, Y: np.array = None, return_boot: bool = False):
+    def pval(self, X, Y: np.array = None, return_boot: bool = False, return_stat: bool = False):
         """
         Compute the p-value for the MMD test.
 
@@ -24,10 +24,14 @@ class Bootstrap:
         """
         boot_stats, test_stat = self.compute_bootstrap(X, Y)
         pval = (1. + np.sum(boot_stats > test_stat)) / (self.ndraws + 1)
-        if not return_boot:
+        if not return_boot and not return_stat:
             return pval
-        else:
+        elif return_stat and not return_boot:
+            return pval, test_stat
+        elif not return_stat and return_boot:
             return pval, boot_stats
+        elif return_stat and return_boot:
+            return pval, test_stat, boot_stats
 
 
 class WildBootstrap(Bootstrap):

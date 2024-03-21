@@ -128,6 +128,12 @@ class RBF(object):
         gradgrad_tr = (term1 + term2) * K # n x m
         return self.scale * gradgrad_tr
 
+    def eval_zero(self):
+        x = np.zeros((1, 1))
+        k_zero = np.squeeze(self(x, x))
+        gradgrad_zero = np.squeeze(self.gradgrad(x, x))
+        return np.abs(k_zero), np.abs(gradgrad_zero)
+
 
 class IMQ(object):
     """A kernel class need to have the following methods:
@@ -251,6 +257,8 @@ class TiltedKernel(object):
         term1 = np.expand_dims(grad_W_X, -2) * np.expand_dims(K, -1) * W_Y_pd # n, m, d
         term2 = W_X[..., np.newaxis, np.newaxis] * grad_K_XY * W_Y_pd # n, m, d
 
+        print("grad_first", (term1 + term2)[:3, :3, 0])
+
         return term1 + term2
 
     def grad_second(self, X, Y):
@@ -273,6 +281,7 @@ class TiltedKernel(object):
             np.expand_dims(W_Y, -2), -1
         ) # n, m, d
         term2 = W_X_pd * np.expand_dims(K, -1) * np.expand_dims(grad_W_Y, -3) # n, m, d
+        print("grad_second", (term1 + term2)[:3, :3, 0])
         return term1 + term2
 
     def gradgrad(self, X, Y):
@@ -331,6 +340,10 @@ class PolyWeightFunction(object):
     def __init__(self, b = 0.5):
         self.b = b
         assert self.b >= 0.5
+
+        self.weighted_score_sup = 1. #TODO assuming Gaussian score
+        self.sup = 1.
+        self.derivative_sup = 2. * self.b
 
     def __call__(self, X):
         score_norm_sq = np.sum(X**2, -1) # n
