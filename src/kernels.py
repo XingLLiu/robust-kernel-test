@@ -1,4 +1,5 @@
-import numpy as np
+# import numpy as np
+import jax.numpy as np
 
 
 def l2norm(X, Y):
@@ -257,7 +258,7 @@ class TiltedKernel(object):
         term1 = np.expand_dims(grad_W_X, -2) * np.expand_dims(K, -1) * W_Y_pd # n, m, d
         term2 = W_X[..., np.newaxis, np.newaxis] * grad_K_XY * W_Y_pd # n, m, d
 
-        print("grad_first", (term1 + term2)[:3, :3, 0])
+        # print("grad_first", (term1 + term2)[:3, :3, 0])
 
         return term1 + term2
 
@@ -281,7 +282,7 @@ class TiltedKernel(object):
             np.expand_dims(W_Y, -2), -1
         ) # n, m, d
         term2 = W_X_pd * np.expand_dims(K, -1) * np.expand_dims(grad_W_Y, -3) # n, m, d
-        print("grad_second", (term1 + term2)[:3, :3, 0])
+        # print("grad_second", (term1 + term2)[:3, :3, 0])
         return term1 + term2
 
     def gradgrad(self, X, Y):
@@ -304,7 +305,7 @@ class TiltedKernel(object):
         grad_W_Y_pd = np.expand_dims(grad_W_Y, -3) # 1, m, d
 
         term1 = np.sum(grad_W_X_pd * grad_K_Y, -1) * W_Y_pd # n, m
-        term2 = W_X * gradgrad_K * W_Y_pd # n, m
+        term2 = W_X_pd * gradgrad_K * W_Y_pd # n, m
         term3 = np.sum(grad_W_X_pd * grad_W_Y_pd, -1) * K # n, m
         term4 = W_X_pd * np.sum(grad_K_X * grad_W_Y_pd, -1) # n, m
 
