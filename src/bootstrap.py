@@ -151,8 +151,7 @@ class EfronBootstrap(Bootstrap):
         # compute test stat
         YY = Y if Y is not None else X
         n = X.shape[-2]
-        vstat = self.divergence.vstat(X, YY) # n, n
-        test_stat = np.sum(vstat) / (n**2)
+        # stat_mat = self.divergence(X, YY, output_dim=2) # n, n # V-stat
 
         # generate bootstrap samples
         subsize = subsize if subsize is not None else n
@@ -181,20 +180,31 @@ class EfronBootstrap(Bootstrap):
         # boot_stats = []
         # for X, Y in tqdm(zip(Xs, Ys), total=self.ndraws):
         #     boot_stats.append(self.divergence.vstat(X, Y, output_dim=1))
-        # 4. work with the stat matrix directly
-        boot_stats = []
-        ii1_ls, ii2_ls = [], []        
-        # for ii in tqdm(idx):
-        for ii in idx:
-            ii1, ii2 = np.meshgrid(ii, ii, indexing="ij")
-            ii1_ls.append(ii1)
-            ii2_ls.append(ii2)
+        # # 4. work with the stat matrix directly
+        # ii1_ls, ii2_ls = [], []        
+        # # for ii in tqdm(idx):
+        # for ii in idx:
+        #     ii1, ii2 = np.meshgrid(ii, ii, indexing="ij")
+        #     ii1_ls.append(ii1)
+        #     ii2_ls.append(ii2)
         
-        ii1 = np.stack(ii1_ls, axis=0) # b, n, n
-        ii2 = np.stack(ii2_ls, axis=0) # b, n, n
-        vstat_boot = vstat[ii1, ii2] # b, n, n
-        boot_stats = np.sum(vstat_boot, axis=(-1, -2)) / (ii1.shape[-1]**2)
-            
-        # boot_stats = list(map(lambda j: np.sum(vstat[ii1_ls[j], ii2_ls[j]]) / n**2, range(len(ii1_ls))))
-
-        return boot_stats, test_stat
+        # # print(1)
+        # ii1 = np.stack(ii1_ls, axis=0) # b, n, n
+        # ii2 = np.stack(ii2_ls, axis=0) # b, n, n
+        # # print(2)
+        # stat_mat_boot = stat_mat[ii1, ii2] # b, n, n
+        # # print(3)
+        # boot_stats = np.sum(stat_mat_boot, axis=(-1, -2)) / (ii1.shape[-1]**2)
+        # # print(4)
+        
+        # # boot_stats = list(map(lambda j: np.sum(vstat[ii1_ls[j], ii2_ls[j]]) / n**2, range(len(ii1_ls))))
+        
+        # 5. work with the stat matrix as a loop
+        boot_stats = []
+        for ii in idx:
+        # for ii in tqdm(idx):
+            assert X[ii].shape == X.shape
+            stat_boot = self.divergence(X, X[ii])
+            boot_stats.append(stat_boot)
+        
+        return boot_stats

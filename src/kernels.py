@@ -59,6 +59,11 @@ class RBF(object):
         self.med_heuristic = med_heuristic
         self.scale = scale
 
+        self.sup = 1.
+        self.grad_first_sup = 1 / np.sqrt(self.sigma_sq / 2.)
+        self.grad_second_sup = 1 / np.sqrt(self.sigma_sq / 2.)
+        self.gradgrad_sup = 1 / (self.sigma_sq / 2.)
+
     def UB(self):
         """Compute sup_x k(x, x)
         """

@@ -1,4 +1,5 @@
 import numpy as np
+import src.bootstrap as boot
 
 
 class Metric:
@@ -12,26 +13,32 @@ class MMD(Metric):
     def __init__(self, kernel):
         self.kernel = kernel
     
-    def __call__(self, X, Y):
+    def __call__(self, X, Y, output_dim: int = 1):
         """
         @param X: numpy array of shape (n, d)
         @param Y: numpy array of shape (m, d)
 
         @return: numpy array of shape (1,)
         """
+        assert X.shape[-2] == Y.shape[-2]
         K_XX = self.kernel(X, X) # n, n
         K_YY = self.kernel(Y, Y) # m, m
         K_XY = self.kernel(X, Y) # n, m
+        
+        if output_dim == 2:
+            assert X.shape[-2] == Y.shape[-2]
+            res = K_XX + K_YY - K_XY - K_XY.T
+            return res
 
         n, m = X.shape[-2], Y.shape[-2]
-        term1 = np.sum(K_XX) / (n * (n-1))
-        term2 = np.sum(K_YY) / (m * (m-1))
+        term1 = np.sum(K_XX) / n**2
+        term2 = np.sum(K_YY) / m**2
         term3 = np.sum(K_XY) / (n * m)
-        
+        # res = term1 / (n * (n-1)) + term2 / (m * (m-1)) - 2 * term3 / (n * m)
         res = term1 + term2 - 2 * term3
         return res
     
-    def vstat(self, X, Y):
+    def vstat(self, X, Y, output_dim: int = 1):
         K_XX = self.kernel(X, X) # n, n
         K_YY = self.kernel(Y, Y) # m, m
         K_XY = self.kernel(X, Y) # n, m
@@ -39,9 +46,13 @@ class MMD(Metric):
         n, m = X.shape[-2], Y.shape[-2]
         assert n == m, "ustat is only valid when X and Y have the same sample size."
         vstat = K_XX + K_YY - K_XY - K_XY.T # n, n
-        return vstat
 
-    def test_threshold(self, n: int, alpha: float = 0.05, method: str = "deviation", eps: float = None):
+        if output_dim == 2:
+            return vstat
+            
+        return vstat / n**2
+
+    def test_threshold(self, n: int, X: np.array = None, alpha: float = 0.05, method: str = "deviation"):
         """
         Compute the threshold for the MMD test.
         """
@@ -49,16 +60,20 @@ class MMD(Metric):
             # only valid when n == m
             K = self.kernel.UB()
             threshold = np.sqrt(2 * K / n) * (1 + np.sqrt(- np.log(alpha)))
+            return threshold
 
-        elif method == "deviation_robust":
-            # only valid when n == m
-            assert eps is not None, "eps must be provided."
-            assert eps < alpha, "eps must be less than test level."
-            K = self.kernel.UB()
-            alpha_p = (alpha - eps) / (1 - eps)
-            threshold = np.sqrt(2 * K / n) * (1 + np.sqrt(- np.log(alpha_p / 2)))
+        elif method == "bootstrap":
+            wild_boot = boot.WildBootstrap(self)
+            nsub = X.shape[0] // 2
+            # boot_stats, _ = wild_boot.compute_bootstrap(X[:nsub], X[nsub:(2*nsub)])
+            # threshold = np.quantile(boot_stats, 1 - alpha)
+            boot_stats, test_stat = wild_boot.compute_bootstrap(X[:nsub], X[nsub:(2*nsub)])
+            return boot_stats, test_stat
 
-        return threshold
+        elif method == "bootstrap_efron":
+            efron_boot = boot.EfronBootstrap(self, ndraws=100)
+            boot_stats = efron_boot.compute_bootstrap(X)
+            return boot_stats
 
     def reverse_test(self, X, Y, theta: float, alpha: float = 0.05, method = "deviation"):
 
@@ -150,7 +165,8 @@ class KSD(Metric):
 
         if not vstat:
             # extract diagonal
-            np.fill_diagonal(u_p, 0.) #TODO make this batchable
+            # np.fill_diagonal(u_p, 0.) #TODO make this batchable
+            u_p = u_p.at[np.diag_indices(u_p.shape[0])].set(0.)
             denom = (X.shape[-2] * (Y.shape[-2]-1))
         else:
             denom = (X.shape[-2] * Y.shape[-2])
@@ -162,19 +178,50 @@ class KSD(Metric):
         elif output_dim == 2:
             return u_p
 
-    def test_threshold(self, n: int, alpha: float = 0.05, method: str = "deviation"):
+    def test_threshold(self, n: int, m0: int = None, alpha: float = 0.05, method: str = "deviation"):
         """
         Compute the threshold for the MMD test.
         """
-        if method == "deviation":
-            h_zero, gradgrad_h_zero = self.k.kernel.eval_zero()
-            ws_sup = self.k.weight_fn.weighted_score_sup
-            m_sup = self.k.weight_fn.sup
-            grad_m_sup = self.k.weight_fn.derivative_sup
-            tau = (ws_sup**2 + 2 * ws_sup * grad_m_sup + grad_m_sup**2) * h_zero + m_sup**2 * gradgrad_h_zero
-            self.tau = tau
+        h_zero, gradgrad_h_zero = self.k.kernel.eval_zero()
+        ws_sup = self.k.weight_fn.weighted_score_sup
+        m_sup = self.k.weight_fn.sup
+        grad_m_sup = self.k.weight_fn.derivative_sup
+        tau = (ws_sup**2 + 2 * ws_sup * grad_m_sup + grad_m_sup**2) * h_zero + m_sup**2 * gradgrad_h_zero
+        self.tau = tau
 
-            threshold = tau / n + np.sqrt(- 2 * tau**2 * np.log(alpha) / n)
+        k_sup = self.k.kernel.sup
+        grad_k_first_sup = self.k.kernel.grad_first_sup
+        grad_k_second_sup = self.k.kernel.grad_second_sup
+        gradgrad_k_sup = self.k.kernel.gradgrad_sup
+        tau_star = (ws_sup**2 * k_sup + 
+            ws_sup * grad_k_second_sup * m_sup + ws_sup * k_sup * grad_m_sup +
+            ws_sup * grad_k_first_sup * m_sup + ws_sup * k_sup * grad_m_sup +
+            grad_m_sup**2 * k_sup + m_sup * grad_k_first_sup * grad_m_sup +
+            grad_m_sup * grad_k_second_sup * m_sup + m_sup**2 * gradgrad_k_sup
+        )
+        self.tau_star = tau_star
+
+        if method == "deviation":
+            # # 1. threshold for standard KSD (scale might be wrong)
+            # threshold = tau / n + np.sqrt(- 2 * tau**2 * np.log(alpha) / n)
+            
+            # 2. threshold for (non-squared) P-KSD
+            threshold = np.sqrt(max(tau, tau_star) / n) + np.sqrt(- 2 * tau / n * np.log(alpha) / n)
+
+        elif method == "deviation_robust":
+            # # 1. threshold assuming eps-contam model
+            # eps0 = 1 - m0 / n
+            # # term1 = 2 * eps0 * np.sqrt(2 * sigma_infty_sq / (alpha * m0))
+            # term1 = 2 * eps0 * tau_star * np.sqrt(2 / m0 * np.log(2 / alpha))
+            # term2 = eps0**2 * tau
+            # gamma_m0 = tau / m0 + np.sqrt(- 2 * tau**2 * np.log(alpha / 2) / m0)
+
+            # threshold = gamma_m0 + term1 + term2
+
+            # 2. threshold assuming KSD ball
+            # threshold = np.sqrt(max(tau, tau_star) / n) + np.sqrt(- 2 * tau / n * np.log(alpha) / n)
+            # threshold += 
+            pass
 
         return threshold
 
