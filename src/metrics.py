@@ -52,7 +52,7 @@ class MMD(Metric):
             
         return vstat / n**2
 
-    def test_threshold(self, n: int, X: np.array = None, alpha: float = 0.05, method: str = "deviation"):
+    def test_threshold(self, n: int, X: np.array = None, alpha: float = 0.05, method: str = "deviation", Y: np.array = None):
         """
         Compute the threshold for the MMD test.
         """
@@ -72,7 +72,7 @@ class MMD(Metric):
 
         elif method == "bootstrap_efron":
             efron_boot = boot.EfronBootstrap(self, ndraws=100)
-            boot_stats = efron_boot.compute_bootstrap(X)
+            boot_stats = efron_boot.compute_bootstrap(X, Y)
             return boot_stats
 
     def reverse_test(self, X, Y, theta: float, alpha: float = 0.05, method = "deviation"):
@@ -208,15 +208,15 @@ class KSD(Metric):
             # 2. threshold for (non-squared) P-KSD
             threshold = np.sqrt(max(tau, tau_star) / n) + np.sqrt(- 2 * tau / n * np.log(alpha) / n)
 
-        elif method == "deviation_robust":
-            # # 1. threshold assuming eps-contam model
-            # eps0 = 1 - m0 / n
-            # # term1 = 2 * eps0 * np.sqrt(2 * sigma_infty_sq / (alpha * m0))
-            # term1 = 2 * eps0 * tau_star * np.sqrt(2 / m0 * np.log(2 / alpha))
-            # term2 = eps0**2 * tau
-            # gamma_m0 = tau / m0 + np.sqrt(- 2 * tau**2 * np.log(alpha / 2) / m0)
+        elif method == "eps_robust":
+            # 1. threshold assuming eps-contam model
+            eps0 = 1 - m0 / n
+            # term1 = 2 * eps0 * np.sqrt(2 * sigma_infty_sq / (alpha * m0))
+            term1 = 2 * eps0 * tau_star * np.sqrt(2 / m0 * np.log(2 / alpha))
+            term2 = eps0**2 * tau
+            gamma_m0 = tau / m0 + np.sqrt(- 2 * tau**2 * np.log(alpha / 2) / m0)
 
-            # threshold = gamma_m0 + term1 + term2
+            threshold = gamma_m0 + term1 + term2
 
             # 2. threshold assuming KSD ball
             # threshold = np.sqrt(max(tau, tau_star) / n) + np.sqrt(- 2 * tau / n * np.log(alpha) / n)

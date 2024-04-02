@@ -1,4 +1,5 @@
 import numpy as np
+# import jax.numpy as np
 from tqdm import tqdm, trange
 
 
@@ -144,9 +145,9 @@ class EfronBootstrap(Bootstrap):
         """
         assert len(X.shape) == 2, "X cannot be batched."
 
-        if Y is not None:
-            assert X.shape[-2] == Y.shape[-2], "X and Y must have the same sample size."
-            assert len(Y.shape) == 2, "Y cannot be batched."
+        # if Y is not None:
+        #     assert X.shape[-2] == Y.shape[-2], "X and Y must have the same sample size."
+        #     assert len(Y.shape) == 2, "Y cannot be batched."
 
         # compute test stat
         YY = Y if Y is not None else X
@@ -158,13 +159,13 @@ class EfronBootstrap(Bootstrap):
         idx = np.random.choice(n, size=(self.ndraws, subsize), replace=True) # b, n
         Xs = X[idx] # b, n, d
         assert Xs.shape == (self.ndraws, n, X.shape[-1]), "Xs shape is wrong."
-        if Y is None:
-            # print("one-sample")
-            Ys = Xs
-        else:
-            # print("two-sample")
-            raise ValueError("Two-sample testing is not supported")
-            Ys = np.repeat(Y[np.newaxis], self.ndraws, axis=0) # b, n, d
+        # if Y is None:
+        #     # print("one-sample")
+        #     Ys = Xs
+        # else:
+        #     # print("two-sample")
+        #     raise ValueError("Two-sample testing is not supported")
+        #     Ys = np.repeat(Y[np.newaxis], self.ndraws, axis=0) # b, n, d
 
         # compute bootstrap stat
         # 1. compute in a batch
@@ -201,10 +202,16 @@ class EfronBootstrap(Bootstrap):
         
         # 5. work with the stat matrix as a loop
         boot_stats = []
-        for ii in idx:
+        for i, ii in enumerate(idx):
         # for ii in tqdm(idx):
             assert X[ii].shape == X.shape
-            stat_boot = self.divergence(X, X[ii])
+            if Y is None:
+                stat_boot = self.divergence(X, X[ii])
+            else:
+                #TODO oracle samples
+                if i >= len(Y):
+                    break
+                stat_boot = self.divergence(X, Y[i])
             boot_stats.append(stat_boot)
         
         return boot_stats
