@@ -206,24 +206,27 @@ class KSD(Metric):
             # threshold = tau / n + np.sqrt(- 2 * tau**2 * np.log(alpha) / n)
             
             # 2. threshold for (non-squared) P-KSD
-            threshold = np.sqrt(max(tau, tau_star) / n) + np.sqrt(- 2 * tau / n * np.log(alpha) / n)
+            threshold = np.sqrt(max(tau, tau_star) / n) + np.sqrt(- 2 * tau * (np.log(alpha)) / n)
 
-        elif method == "eps_robust":
-            # 1. threshold assuming eps-contam model
+        elif method == "ol_robust":
+            # 1. threshold assuming eps-contam model (for non-squared KSD)
+            # sigma_infty_sq = tau_star**2
             eps0 = 1 - m0 / n
             # term1 = 2 * eps0 * np.sqrt(2 * sigma_infty_sq / (alpha * m0))
-            term1 = 2 * eps0 * tau_star * np.sqrt(2 / m0 * np.log(2 / alpha))
+            term1 = 2 * eps0 * tau_star * np.sqrt(2 * np.log(2 / alpha) / m0)
             term2 = eps0**2 * tau
-            gamma_m0 = tau / m0 + np.sqrt(- 2 * tau**2 * np.log(alpha / 2) / m0)
+            gamma_m0 = np.sqrt(max(tau, tau_star) / m0) + np.sqrt(- 2 * tau * (np.log(alpha)) / m0)
 
-            threshold = gamma_m0 + term1 + term2
+            threshold = np.sqrt(gamma_m0**2 + term1 + term2)
 
+        elif method == "ball_robust":
             # 2. threshold assuming KSD ball
             # threshold = np.sqrt(max(tau, tau_star) / n) + np.sqrt(- 2 * tau / n * np.log(alpha) / n)
             # threshold += 
             pass
 
         return threshold
+
 
 class PairwiseNorm(Metric):
 
