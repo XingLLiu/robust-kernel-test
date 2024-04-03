@@ -144,74 +144,58 @@ class EfronBootstrap(Bootstrap):
         @param Y: numpy array of shape (m, d). If not, one-sample testing is used.
         """
         assert len(X.shape) == 2, "X cannot be batched."
-
-        # if Y is not None:
-        #     assert X.shape[-2] == Y.shape[-2], "X and Y must have the same sample size."
-        #     assert len(Y.shape) == 2, "Y cannot be batched."
-
-        # compute test stat
-        YY = Y if Y is not None else X
         n = X.shape[-2]
-        # stat_mat = self.divergence(X, YY, output_dim=2) # n, n # V-stat
 
         # generate bootstrap samples
         subsize = subsize if subsize is not None else n
         idx = np.random.choice(n, size=(self.ndraws, subsize), replace=True) # b, n
         Xs = X[idx] # b, n, d
         assert Xs.shape == (self.ndraws, n, X.shape[-1]), "Xs shape is wrong."
-        # if Y is None:
-        #     # print("one-sample")
-        #     Ys = Xs
-        # else:
-        #     # print("two-sample")
-        #     raise ValueError("Two-sample testing is not supported")
-        #     Ys = np.repeat(Y[np.newaxis], self.ndraws, axis=0) # b, n, d
 
-        # compute bootstrap stat
-        # 1. compute in a batch
-        # boot_stats = self.divergence.vstat(Xs, Ys, output_dim=1) # b
-        # 2. compute in minibatches
-        # boot_stats = []
-        # nsub = 100
-        # for i in trange(int(np.ceil(self.ndraws / nsub))):
-        #     i1, i2 = i * nsub, (i + 1) * nsub
-        #     boot_stats.append(self.divergence.vstat(Xs[i1:i2], Ys[i1:i2], output_dim=1))
-        # boot_stats = np.concatenate(boot_stats)
-        # 3. compute sequentially
-        # boot_stats = []
-        # for X, Y in tqdm(zip(Xs, Ys), total=self.ndraws):
-        #     boot_stats.append(self.divergence.vstat(X, Y, output_dim=1))
-        # # 4. work with the stat matrix directly
-        # ii1_ls, ii2_ls = [], []        
-        # # for ii in tqdm(idx):
-        # for ii in idx:
-        #     ii1, ii2 = np.meshgrid(ii, ii, indexing="ij")
-        #     ii1_ls.append(ii1)
-        #     ii2_ls.append(ii2)
-        
-        # # print(1)
-        # ii1 = np.stack(ii1_ls, axis=0) # b, n, n
-        # ii2 = np.stack(ii2_ls, axis=0) # b, n, n
-        # # print(2)
-        # stat_mat_boot = stat_mat[ii1, ii2] # b, n, n
-        # # print(3)
-        # boot_stats = np.sum(stat_mat_boot, axis=(-1, -2)) / (ii1.shape[-1]**2)
-        # # print(4)
-        
-        # # boot_stats = list(map(lambda j: np.sum(vstat[ii1_ls[j], ii2_ls[j]]) / n**2, range(len(ii1_ls))))
-        
-        # 5. work with the stat matrix as a loop
         boot_stats = []
-        for i, ii in enumerate(idx):
-        # for ii in tqdm(idx):
+        for ii in idx:
             assert X[ii].shape == X.shape
-            if Y is None:
-                stat_boot = self.divergence(X, X[ii])
-            else:
-                #TODO oracle samples
-                if i >= len(Y):
-                    break
-                stat_boot = self.divergence(X, Y[i])
+
+            stat_boot = self.divergence(X, X[ii])
+            boot_stats.append(stat_boot)
+        
+        return boot_stats
+    
+    def compute_bootstrap_degenerate(self, X, Y, subsize: int = None):
+        """
+        Compute the threshold for the MMD test.
+
+        @param X: numpy array of shape (n, d)
+        @param Y: numpy array of shape (m, d). If not, one-sample testing is used.
+        """
+        assert len(X.shape) == 2, "X cannot be batched."
+        n = X.shape[-2]
+        assert n == Y.shape[-2], "X and Y must have the same sample size."
+
+        # generate bootstrap samples
+        subsize = subsize if subsize is not None else n
+        idx = np.random.choice(n, size=(self.ndraws, subsize), replace=True) # b, n
+        Xs = X[idx] # b, n, d
+        assert Xs.shape == (self.ndraws, n, X.shape[-1]), "Xs shape is wrong."
+
+        # work with the stat matrix as a loop
+        boot_stats = []
+        term4 = self.divergence.symmetric_stat_mat(X, Y, X, Y) # n, n
+        term4 = np.sum(term4) / n
+        for ii in idx:
+            assert X[ii].shape == X.shape
+
+            Xb = X[ii]
+            Yb = Y[ii]
+            term1 = self.divergence.symmetric_stat_mat(Xb, Yb, Xb, Yb) # n, n
+            term2 = self.divergence.symmetric_stat_mat(Xb, Yb, X, Y) # n, n
+            term2 = np.sum(term2, -2, keepdims=True) / n # 1, n
+            term3 = self.divergence.symmetric_stat_mat(X, Y, Xb, Yb) # n, n
+            term3 = np.sum(term3, -1, keepdims=True) / n # n, 1
+
+            summand = term1 - term2 - term3 + term4
+            summand = summand.at[np.diag_indices(n)].set(0.)
+            stat_boot = np.sum(summand) / (n*(n - 1))
             boot_stats.append(stat_boot)
         
         return boot_stats

@@ -38,6 +38,16 @@ class MMD(Metric):
         res = term1 / (n * (n-1)) + term2 / (m * (m-1)) - 2 * term3 / (n * m)
         return res
 
+    def symmetric_stat_mat(self, X, Y, Xp, Yp):
+        assert X.shape[-2] == Y.shape[-2] == Xp.shape[-2] == Yp.shape[-2]
+
+        K_XX = self.kernel(X, Xp) # n, n
+        K_YY = self.kernel(Y, Yp) # m, m
+        K_XY = self.kernel(X, Yp) # n, m
+        K_YX = self.kernel(Y, Xp) # m, n
+        res = K_XX + K_YY - K_XY - K_YX
+        return res
+
     def vstat(self, X, Y, output_dim: int = 1):
         K_XX = self.kernel(X, X) # n, n
         K_YY = self.kernel(Y, Y) # m, m
@@ -52,7 +62,7 @@ class MMD(Metric):
             
         return vstat / n**2
 
-    def test_threshold(self, n: int, X: np.array = None, alpha: float = 0.05, method: str = "deviation", Y: np.array = None):
+    def test_threshold(self, n: int, X: np.array = None, nboot: int = 100, alpha: float = 0.05, method: str = "deviation", Y: np.array = None):
         """
         Compute the threshold for the MMD test.
         """
@@ -64,17 +74,23 @@ class MMD(Metric):
 
         elif method == "bootstrap":
             wild_boot = boot.WildBootstrap(self)
-            nsub = X.shape[0] // 2
-            # boot_stats, _ = wild_boot.compute_bootstrap(X[:nsub], X[nsub:(2*nsub)])
-            # threshold = np.quantile(boot_stats, 1 - alpha)
-            boot_stats, test_stat = wild_boot.compute_bootstrap(X[:nsub], X[nsub:(2*nsub)])
+            # nsub = X.shape[0] // 2
+            # boot_stats, test_stat = wild_boot.compute_bootstrap(X[:nsub], X[nsub:(2*nsub)])
+
+            boot_stats, test_stat = wild_boot.compute_bootstrap(X)
             return boot_stats, test_stat
 
         elif method == "bootstrap_efron":
-            efron_boot = boot.EfronBootstrap(self, ndraws=100)
+            efron_boot = boot.EfronBootstrap(self, ndraws=nboot)
             boot_stats = efron_boot.compute_bootstrap(X, Y)
             return boot_stats
 
+        elif method == "bootstrap_ustat":
+            efron_boot = boot.EfronBootstrap(self, ndraws=100)
+            assert Y is not None
+            boot_stats = efron_boot.compute_bootstrap_degenerate(X, Y)
+            return boot_stats
+        
     def reverse_test(self, X, Y, theta: float, alpha: float = 0.05, method = "deviation"):
 
         mmd = self(X, Y)
@@ -228,6 +244,7 @@ class KSD(Metric):
             if theta == "ol":
                 assert eps0 is not None
                 theta = eps0 * tau**0.5
+                self.theta = theta
                 
             gamma_n = np.sqrt(max(tau, tau_star) / n) + np.sqrt(- 2 * tau * (np.log(alpha)) / n)
             threshold = theta + gamma_n
