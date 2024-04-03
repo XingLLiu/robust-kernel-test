@@ -20,7 +20,7 @@ class MMD(Metric):
 
         @return: numpy array of shape (1,)
         """
-        assert X.shape[-2] == Y.shape[-2]
+        # assert X.shape[-2] == Y.shape[-2]
         K_XX = self.kernel(X, X) # n, n
         K_YY = self.kernel(Y, Y) # m, m
         K_XY = self.kernel(X, Y) # n, m
@@ -31,13 +31,13 @@ class MMD(Metric):
             return res
 
         n, m = X.shape[-2], Y.shape[-2]
-        term1 = np.sum(K_XX) / n**2
-        term2 = np.sum(K_YY) / m**2
-        term3 = np.sum(K_XY) / (n * m)
-        # res = term1 / (n * (n-1)) + term2 / (m * (m-1)) - 2 * term3 / (n * m)
-        res = term1 + term2 - 2 * term3
+        term1 = np.sum(K_XX)
+        term2 = np.sum(K_YY)
+        term3 = np.sum(K_XY)
+        # res = term1 / n**2 + term2 / m**2 - 2 * term3 / (n * m)
+        res = term1 / (n * (n-1)) + term2 / (m * (m-1)) - 2 * term3 / (n * m)
         return res
-    
+
     def vstat(self, X, Y, output_dim: int = 1):
         K_XX = self.kernel(X, X) # n, n
         K_YY = self.kernel(Y, Y) # m, m
@@ -178,7 +178,9 @@ class KSD(Metric):
         elif output_dim == 2:
             return u_p
 
-    def test_threshold(self, n: int, m0: int = None, alpha: float = 0.05, method: str = "deviation"):
+    def test_threshold(
+            self, n: int, eps0: float = None, theta: float = None, alpha: float = 0.05, method: str = "deviation",
+        ):
         """
         Compute the threshold for the MMD test.
         """
@@ -211,7 +213,7 @@ class KSD(Metric):
         elif method == "ol_robust":
             # 1. threshold assuming eps-contam model (for non-squared KSD)
             # sigma_infty_sq = tau_star**2
-            eps0 = 1 - m0 / n
+            m0 = int(np.floor(eps0 * n))
             # term1 = 2 * eps0 * np.sqrt(2 * sigma_infty_sq / (alpha * m0))
             term1 = 2 * eps0 * tau_star * np.sqrt(2 * np.log(2 / alpha) / m0)
             term2 = eps0**2 * tau
@@ -223,7 +225,12 @@ class KSD(Metric):
             # 2. threshold assuming KSD ball
             # threshold = np.sqrt(max(tau, tau_star) / n) + np.sqrt(- 2 * tau / n * np.log(alpha) / n)
             # threshold += 
-            pass
+            if theta == "ol":
+                assert eps0 is not None
+                theta = eps0 * tau**0.5
+                
+            gamma_n = np.sqrt(max(tau, tau_star) / n) + np.sqrt(- 2 * tau * (np.log(alpha)) / n)
+            threshold = theta + gamma_n
 
         return threshold
 
