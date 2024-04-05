@@ -1,5 +1,5 @@
 import numpy as np
-# import jax.numpy as np
+# import jax.numpy as jnp
 from tqdm import tqdm, trange
 
 
@@ -128,13 +128,13 @@ class RobustMMDTest(object):
 
 class EfronBootstrap(Bootstrap):
 
-    def __init__(self, divergence, ndraws: int = 1000):
+    def __init__(self, divergence, nboot: int = 1000):
         """
         @param mmd: MMD object
-        @param ndraws: number of bootstrap draws
+        @param nboot: number of bootstrap draws
         """
         self.divergence = divergence
-        self.ndraws = ndraws
+        self.nboot = nboot
 
     def compute_bootstrap(self, X, Y: np.ndarray = None, subsize: int = None):
         """
@@ -148,9 +148,9 @@ class EfronBootstrap(Bootstrap):
 
         # generate bootstrap samples
         subsize = subsize if subsize is not None else n
-        idx = np.random.choice(n, size=(self.ndraws, subsize), replace=True) # b, n
+        idx = np.random.choice(n, size=(self.nboot, subsize), replace=True) # b, n
         Xs = X[idx] # b, n, d
-        assert Xs.shape == (self.ndraws, n, X.shape[-1]), "Xs shape is wrong."
+        assert Xs.shape == (self.nboot, n, X.shape[-1]), "Xs shape is wrong."
 
         boot_stats = []
         for ii in idx:
@@ -174,9 +174,9 @@ class EfronBootstrap(Bootstrap):
 
         # generate bootstrap samples
         subsize = subsize if subsize is not None else n
-        idx = np.random.choice(n, size=(self.ndraws, subsize), replace=True) # b, n
+        idx = np.random.choice(n, size=(self.nboot, subsize), replace=True) # b, n
         Xs = X[idx] # b, n, d
-        assert Xs.shape == (self.ndraws, n, X.shape[-1]), "Xs shape is wrong."
+        assert Xs.shape == (self.nboot, n, X.shape[-1]), "Xs shape is wrong."
 
         # work with the stat matrix as a loop
         boot_stats = []

@@ -34,8 +34,7 @@ class MMD(Metric):
         term1 = np.sum(K_XX)
         term2 = np.sum(K_YY)
         term3 = np.sum(K_XY)
-        # res = term1 / n**2 + term2 / m**2 - 2 * term3 / (n * m)
-        res = term1 / (n * (n-1)) + term2 / (m * (m-1)) - 2 * term3 / (n * m)
+        res = term1 / n**2 + term2 / m**2 - 2 * term3 / (n * m)
         return res
 
     def symmetric_stat_mat(self, X, Y, Xp, Yp):
@@ -81,14 +80,16 @@ class MMD(Metric):
             return boot_stats, test_stat
 
         elif method == "bootstrap_efron":
-            efron_boot = boot.EfronBootstrap(self, ndraws=nboot)
+            efron_boot = boot.EfronBootstrap(self, nboot=nboot)
             boot_stats = efron_boot.compute_bootstrap(X, Y)
             return boot_stats
 
-        elif method == "bootstrap_ustat":
-            efron_boot = boot.EfronBootstrap(self, ndraws=100)
-            assert Y is not None
-            boot_stats = efron_boot.compute_bootstrap_degenerate(X, Y)
+        elif method == "bootstrap_efron_full":
+            assert Y is not None, "Y must be provided for the full bootstrap."
+            efron_boot = boot.EfronBootstrap(self, nboot=nboot)
+            boot_stats_X = efron_boot.compute_bootstrap(X=X, Y=None)
+            boot_stats_Y = efron_boot.compute_bootstrap(X=Y, Y=None)
+            boot_stats = np.array(boot_stats_X) + np.array(boot_stats_Y)
             return boot_stats
         
     def reverse_test(self, X, Y, theta: float, alpha: float = 0.05, method = "deviation"):
