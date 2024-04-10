@@ -72,7 +72,7 @@ class MMD(Metric):
         res = K_XX + K_YY - K_XY - K_YX
         return res
 
-    def vstat(self, X, Y, output_dim: int = 1):
+    def vstat(self, X, Y, output_dim: int = 2):
         K_XX = self.kernel(X, X) # n, n
         K_YY = self.kernel(Y, Y) # m, m
         K_XY = self.kernel(X, Y) # n, m

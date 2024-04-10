@@ -53,11 +53,15 @@ class RBF(object):
         gradgrad: grad_x grad_y k(x, y)
     """
 
-    def __init__(self, sigma_sq=None, med_heuristic=False, scale=1.):
+    def __init__(self, sigma_sq=None, med_heuristic=False, scale=1., X=None, Y=None):
         super().__init__()
         self.sigma_sq = sigma_sq
         self.med_heuristic = med_heuristic
         self.scale = scale
+
+        if med_heuristic:
+            assert X is not None and Y is not None, "Need to provide X, Y for med heuristic"
+            self.bandwidth(X, Y)
 
         self.sup = 1.
         self.grad_first_sup = 1 / np.sqrt(self.sigma_sq / 2.)
