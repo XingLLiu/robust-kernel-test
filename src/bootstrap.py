@@ -148,16 +148,22 @@ class EfronBootstrap(Bootstrap):
 
         # generate bootstrap samples
         subsize = subsize if subsize is not None else n
+        # idx = np.random.choice(n, size=(self.nboot-1, subsize), replace=True) # b-1, n
+        # idx = np.vstack([np.arange(n), idx]) # b, n # add the original sample
         idx = np.random.choice(n, size=(self.nboot, subsize), replace=True) # b, n
         Xs = X[idx] # b, n, d
-        assert Xs.shape == (self.nboot, n, X.shape[-1]), "Xs shape is wrong."
+        assert Xs.shape == (self.nboot, n, X.shape[-1]), f"Xs shape {Xs.shape} is wrong."
 
-        boot_stats = []
-        for ii in idx:
-            assert X[ii].shape == X.shape
+        # # 1. loop approach
+        # boot_stats = []
+        # for ii in idx:
+        #     assert X[ii].shape == X.shape
 
-            stat_boot = self.divergence(X, X[ii])
-            boot_stats.append(stat_boot)
+        #     stat_boot = self.divergence(X, X[ii])
+        #     boot_stats.append(stat_boot)
+
+        # 2. vectorised approach
+        boot_stats = self.divergence.vstat_boot(X, idx)
         
         return boot_stats
     
@@ -174,7 +180,8 @@ class EfronBootstrap(Bootstrap):
 
         # generate bootstrap samples
         subsize = subsize if subsize is not None else n
-        idx = np.random.choice(n, size=(self.nboot, subsize), replace=True) # b, n
+        idx = np.random.choice(n, size=(self.nboot-1, subsize), replace=True) # b-1, n
+        idx = np.vstack([np.arange(n), idx]) # b, n # add the original sample
         Xs = X[idx] # b, n, d
         assert Xs.shape == (self.nboot, n, X.shape[-1]), "Xs shape is wrong."
 

@@ -37,6 +37,31 @@ class MMD(Metric):
         res = term1 / n**2 + term2 / m**2 - 2 * term3 / (n * m)
         return res
 
+    def vstat_boot(self, X, perm):
+        # assert X.shape[-2] == Y.shape[-2]
+        K_XX = self.kernel(X, X) # n, n
+        K_XY = K_XX # n, m
+        K_YY_b = np.expand_dims(K_XX, 0) # 1, m, m
+        
+        perm_idx_ls = [np.meshgrid(ii, ii) for ii in perm]
+        perm_idx0_ls = [ii[0].T for ii in perm_idx_ls]
+        perm_idx1_ls = [ii[1].T for ii in perm_idx_ls]
+        perm_idx0 = np.stack(perm_idx0_ls)
+        perm_idx1 = np.stack(perm_idx1_ls)
+        K_XX_b = K_XX[perm_idx0, perm_idx1] # b, n, n
+
+        n = X.shape[-2]
+        perm_idx1_cross = np.repeat(
+            np.reshape(np.arange(n, dtype="int"), (1, -1)), repeats=n, axis=0,
+        )
+        perm_idx1_cross = np.expand_dims(perm_idx1_cross, 0)
+        K_XY_b = K_XY[perm_idx0, perm_idx1_cross] # b, n, m
+        K_YX_b = np.transpose(K_XY_b, [0, 2, 1]) # b, m, n
+
+        res = K_XX_b + K_YY_b - K_XY_b - K_YX_b # b, n, n
+        res = np.sum(res, [-1, -2]) / n**2 # b
+        return res
+
     def symmetric_stat_mat(self, X, Y, Xp, Yp):
         assert X.shape[-2] == Y.shape[-2] == Xp.shape[-2] == Yp.shape[-2]
 
