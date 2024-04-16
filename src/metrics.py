@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.stats as sci_stats
 import src.bootstrap as boot
 
 
@@ -86,6 +87,28 @@ class MMD(Metric):
             
         return vstat / n**2
 
+    def jackknife(self, X, Y):
+        n = X.shape[-2]
+
+        K_XX = self.kernel(X, X)
+        K_YY = self.kernel(Y, Y)
+        K_XY = self.kernel(X, Y)
+        mmd_kernel = K_XX + K_YY - K_XY - K_XY.T
+        
+        # u-stat
+        u_stat_mat = mmd_kernel.at[np.diag_indices(mmd_kernel.shape[0])].set(0.)
+        u_stat = np.sum(u_stat_mat) / (n * (n - 1))
+
+        # jackknife
+        term1 = np.sum(np.matmul(mmd_kernel.T, mmd_kernel))
+        term2_prod = np.dot(mmd_kernel.T, np.diagonal(mmd_kernel))
+        term2 = np.sum(term2_prod)
+        term3 = np.sum(mmd_kernel**2)
+        term4 = np.sum(np.diagonal(mmd_kernel)**2)
+
+        var = 4 * (term1 - 2 * term2 - term3 + 2 * term4) / (n * (n - 1) * (n - 2)) - u_stat**2
+        return u_stat, var
+
     def test_threshold(self, n: int, X: np.array = None, nboot: int = 100, alpha: float = 0.05, method: str = "deviation", Y: np.array = None):
         """
         Compute the threshold for the MMD test.
@@ -94,6 +117,12 @@ class MMD(Metric):
             # only valid when n == m
             K = self.kernel.UB()
             threshold = np.sqrt(2 * K / n) * (1 + np.sqrt(- np.log(alpha)))
+            return threshold
+
+        elif method == "deviation_proper":
+            # only valid when n == m
+            K = self.kernel.UB()
+            threshold = np.sqrt(8 * K / n) * (1 + np.sqrt(- np.log(alpha)))
             return threshold
 
         elif method == "bootstrap":
@@ -118,11 +147,23 @@ class MMD(Metric):
             return boot_stats
         
     def reverse_test(self, X, Y, theta: float, alpha: float = 0.05, method = "deviation"):
+        
+        if method == "CLT":
+            n = X.shape[-2]
+            u_stat, var = self.jackknife(X, Y)
+            quantile = sci_stats.norm.ppf(alpha)
+            threshold = theta**2 + var**0.5 * quantile / np.sqrt(n)
+            res = float(u_stat <= threshold)
+            self.u_stat_val = u_stat
+            self.var_val = var
+            self.clt_threshold = threshold
 
-        mmd = self(X, Y)
-        n = X.shape[-2]
-        threshold = self.test_threshold(n, alpha, method=method)
-        res = float(max(0, theta - mmd**0.5) > threshold)
+        else:
+            mmd = self(X, Y)
+            n = X.shape[-2]
+            threshold = self.test_threshold(n, alpha, method=method)
+            res = float(max(0, theta - mmd**0.5) > threshold)
+
         return res
 
 
