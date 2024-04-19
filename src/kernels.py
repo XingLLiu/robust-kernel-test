@@ -347,7 +347,8 @@ class TiltedKernel(object):
 
 class PolyWeightFunction(object):
 
-    def __init__(self, b = 0.5):
+    def __init__(self, b = 0.5, loc = 0.):
+        self.loc = np.array(loc)
         self.b = b
         assert self.b >= 0.5
 
@@ -356,14 +357,16 @@ class PolyWeightFunction(object):
         self.derivative_sup = 2. * self.b
 
     def __call__(self, X):
-        score_norm_sq = np.sum(X**2, -1) # n
+        assert np.squeeze(X[-2]).shape == np.squeeze(self.loc).shape
+
+        score_norm_sq = np.sum((X - self.loc)**2, -1) # n
         return np.power(1 + score_norm_sq, -self.b) # n
 
     def grad(self, X):
-        score_norm_sq = np.sum(X**2, -1)
+        score_norm_sq = np.sum((X - self.loc)**2, -1)
 
-        res = np.expand_dims(
-            -2 * self.b * np.power(1 + score_norm_sq, -self.b - 1),
+        res = -2 * self.b * np.expand_dims(
+            np.power(1 + score_norm_sq, -self.b - 1),
             -1,
-        ) * X # n, d
+        ) * (X - self.loc) # n, d
         return res

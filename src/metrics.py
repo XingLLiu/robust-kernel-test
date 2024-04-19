@@ -87,7 +87,7 @@ class MMD(Metric):
             
         return vstat / n**2
 
-    def jackknife(self, X, Y):
+    def jackknife(self, X, Y, method):
         n = X.shape[-2]
 
         K_XX = self.kernel(X, X)
@@ -100,13 +100,25 @@ class MMD(Metric):
         u_stat = np.sum(u_stat_mat) / (n * (n - 1))
 
         # jackknife
-        term1 = np.sum(np.matmul(mmd_kernel.T, mmd_kernel))
-        term2_prod = np.dot(mmd_kernel.T, np.diagonal(mmd_kernel))
-        term2 = np.sum(term2_prod)
-        term3 = np.sum(mmd_kernel**2)
-        term4 = np.sum(np.diagonal(mmd_kernel)**2)
+        if method == "CLT":
+            term1 = np.sum(np.matmul(mmd_kernel.T, mmd_kernel))
+            term2_prod = np.dot(mmd_kernel.T, np.diagonal(mmd_kernel))
+            term2 = np.sum(term2_prod)
+            term3 = np.sum(mmd_kernel**2)
+            term4 = np.sum(np.diagonal(mmd_kernel)**2)
 
-        var = 4 * (term1 - 2 * term2 - term3 + 2 * term4) / (n * (n - 1) * (n - 2)) - u_stat**2
+            var = 4 * (term1 - 2 * term2 - term3 + 2 * term4) / (n * (n - 1) * (n - 2)) - u_stat**2
+
+        elif method == "CLT_proper":
+            term11 = np.sum(mmd_kernel)
+            term12 = np.sum(mmd_kernel, -2) # n
+            term13 = np.sum(np.diagonal(mmd_kernel)) # n
+            term14 = np.sum(mmd_kernel, -1) # n
+            term15 = 2 * np.diagonal(mmd_kernel) # n
+            term1 = (term11 - term12 - term13 - term14 + term15) / ((n- 1 ) * (n - 2))
+
+            var = (n - 1) * np.sum((term1 - u_stat)**2)
+
         return u_stat, var
 
     def test_threshold(self, n: int, X: np.array = None, nboot: int = 100, alpha: float = 0.05, method: str = "deviation", Y: np.array = None):
@@ -148,9 +160,9 @@ class MMD(Metric):
         
     def reverse_test(self, X, Y, theta: float, alpha: float = 0.05, method = "deviation"):
         
-        if method == "CLT":
+        if method == "CLT" or method == "CLT_proper":
             n = X.shape[-2]
-            u_stat, var = self.jackknife(X, Y)
+            u_stat, var = self.jackknife(X, Y, method)
             quantile = sci_stats.norm.ppf(alpha)
             threshold = theta**2 + var**0.5 * quantile / np.sqrt(n)
             res = float(u_stat <= threshold)
