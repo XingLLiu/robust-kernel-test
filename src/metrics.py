@@ -275,9 +275,10 @@ class KSD(Metric):
 
     def test_threshold(
             self, n: int, eps0: float = None, theta: float = None, alpha: float = 0.05, method: str = "deviation",
+            X: np.array = None,
         ):
         """
-        Compute the threshold for the MMD test.
+        Compute the threshold for the robust test. Threshold = \gamma + \theta.
         """
         h_zero, gradgrad_h_zero = self.k.kernel.eval_zero()
         ws_sup = self.k.weight_fn.weighted_score_sup
@@ -298,6 +299,14 @@ class KSD(Metric):
         )
         self.tau_star = tau_star
 
+        # set theta
+        if theta == "ol":
+            assert eps0 is not None
+            theta = eps0 * tau**0.5
+        
+        self.theta = theta
+
+        # compute threshold
         if method == "deviation":
             # # 1. threshold for standard KSD (scale might be wrong)
             # threshold = tau / n + np.sqrt(- 2 * tau**2 * np.log(alpha) / n)
@@ -320,15 +329,46 @@ class KSD(Metric):
             # 2. threshold assuming KSD ball
             # threshold = np.sqrt(max(tau, tau_star) / n) + np.sqrt(- 2 * tau / n * np.log(alpha) / n)
             # threshold += 
-            if theta == "ol":
-                assert eps0 is not None
-                theta = eps0 * tau**0.5
-                self.theta = theta
                 
             gamma_n = np.sqrt(max(tau, tau_star) / n) + np.sqrt(- 2 * tau * (np.log(alpha)) / n)
             threshold = theta + gamma_n
 
+        elif method == "CLT":
+            assert X is not None, "X must be provided for the CLT threshold."
+            norm_q = sci_stats.norm.ppf(1 - alpha)
+            var_hat = self.jackknife(X, X)
+            term1 = 2 * var_hat**0.5 * norm_q / np.sqrt(n)
+            # threshold = np.sqrt(term1 + theta**2)
+            threshold = term1 + theta**2
+
         return threshold
+
+    def jackknife(self, X, Y):
+        n = X.shape[-2]
+
+        u_p = self.vstat(X, Y, output_dim=2) # n, n
+        
+        # u-stat
+        u_stat_mat = u_p.at[np.diag_indices(u_p.shape[0])].set(0.)
+        u_stat = np.sum(u_stat_mat) / (n * (n - 1))
+
+        # 1. jackknife
+        term11 = np.sum(u_p)
+        term12 = np.sum(u_p, -2) # n
+        term13 = np.sum(np.diagonal(u_p)) # n
+        term14 = np.sum(u_p, -1) # n
+        term15 = 2 * np.diagonal(u_p) # n
+        term1 = (term11 - term12 - term13 - term14 + term15) / ((n - 1 ) * (n - 2))
+
+        var = (n - 1) * np.sum((term1 - u_stat)**2) + 1e-12
+
+        # # 2. standard
+        # witness = np.sum(u_p, axis=1) / n # n
+        # term1 = np.sum(witness**2) / n
+        # term2 = (np.mean(u_p))**2
+        # var = term1 - term2 + 1e-12
+
+        return var
 
 
 class PairwiseNorm(Metric):

@@ -63,10 +63,11 @@ class RBF(object):
             assert X is not None and Y is not None, "Need to provide X, Y for med heuristic"
             self.bandwidth(X, Y)
 
+        inv_bw = 1 / np.sqrt(self.sigma_sq / 2.)
         self.sup = 1.
-        self.grad_first_sup = 1 / np.sqrt(self.sigma_sq / 2.)
-        self.grad_second_sup = 1 / np.sqrt(self.sigma_sq / 2.)
-        self.gradgrad_sup = 1 / (self.sigma_sq / 2.)
+        self.grad_first_sup = inv_bw * np.exp(-0.5)
+        self.grad_second_sup = self.grad_first_sup
+        self.gradgrad_sup = 1 / (self.sigma_sq / 2. )
 
     def UB(self):
         """Compute sup_x k(x, x)
@@ -357,6 +358,8 @@ class PolyWeightFunction(object):
         self.derivative_sup = 2. * self.b
 
     def __call__(self, X):
+        # print("X", X.shape)
+        # print("loc", self.loc.shape, self.loc)
         assert np.squeeze(X[-2]).shape == np.squeeze(self.loc).shape
 
         score_norm_sq = np.sum((X - self.loc)**2, -1) # n
