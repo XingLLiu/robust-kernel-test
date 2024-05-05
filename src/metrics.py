@@ -361,10 +361,7 @@ class KSD(Metric):
             threshold = np.sqrt(max(tau, tau_star) / n) + np.sqrt(- 2 * tau * (np.log(alpha)) / n)
 
         elif method == "ol_robust":
-            # 1. threshold assuming eps-contam model (for non-squared KSD)
-            # sigma_infty_sq = tau_star**2
             m0 = int(np.floor(eps0 * n))
-            # term1 = 2 * eps0 * np.sqrt(2 * sigma_infty_sq / (alpha * m0))
             term1 = 2 * eps0 * tau_star * np.sqrt(2 * np.log(2 / alpha) / m0)
             term2 = eps0**2 * tau
             gamma_m0 = np.sqrt(max(tau, tau_star) / m0) + np.sqrt(- 2 * tau * (np.log(alpha)) / m0)
@@ -372,10 +369,6 @@ class KSD(Metric):
             threshold = np.sqrt(gamma_m0**2 + term1 + term2)
 
         elif method == "ball_robust":
-            # 2. threshold assuming KSD ball
-            # threshold = np.sqrt(max(tau, tau_star) / n) + np.sqrt(- 2 * tau / n * np.log(alpha) / n)
-            # threshold += 
-                
             gamma_n = np.sqrt(max(tau, tau_star) / n) + np.sqrt(- 2 * tau * (np.log(alpha)) / n)
             threshold = theta + gamma_n
 
@@ -397,6 +390,9 @@ class KSD(Metric):
         # u-stat
         u_stat_mat = u_p.at[np.diag_indices(u_p.shape[0])].set(0.)
         u_stat = np.sum(u_stat_mat) / (n * (n - 1))
+
+        # # v-stat
+        # v_stat = np.sum(u_p) / n**2
 
         # 1. jackknife
         term11 = np.sum(u_p)

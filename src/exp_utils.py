@@ -11,15 +11,14 @@ def rej_rate_meanshift(mean_ls, n_ls, nreps, eps0=None, theta="ol", bw=2., alpha
         "tilted": {"stat": [], "pval": [], "rej": [], "boot_stats": []},
         "rbf": {"stat": [], "pval": [], "rej": [], "boot_stats": []},
         "tilted_ol_robust": {"nonsq_stat": [], "stat": [], "threshold": [], "rej": []},
-        "tilted_robust_dev": {"nonsq_stat": [], "stat": [], "threshold": [], "rej": [], "theta": []},
-        "tilted_robust_clt": {"stat": [], "threshold": [], "rej": [], "theta": []},
+        "tilted_robust_dev": {"nonsq_stat": [], "stat": [], "threshold": [], "rej": [], "theta": [], "gamma": []},
+        "tilted_robust_clt": {"nonsq_stat": [], "stat": [], "threshold": [], "rej": [], "theta": [], "gamma": []},
     } for kk in range(len(mean_ls))} for nn in n_ls}
     res["mean_ls"] = mean_ls
     res["theta"] = theta
 
     for n in n_ls:
         for key, mean1 in enumerate(mean_ls):
-            # key = mean
             print("key:", key)
             ###
             dim = mean1.shape[-1]
@@ -81,6 +80,7 @@ def rej_rate_meanshift(mean_ls, n_ls, nreps, eps0=None, theta="ol", bw=2., alpha
                 threshold = ksd.test_threshold(n=n, eps0=eps0, theta=theta, alpha=alpha, method="ball_robust")
                 res[n][key]["tilted_robust_dev"]["threshold"].append(threshold)
                 res[n][key]["tilted_robust_dev"]["theta"].append(ksd.theta)
+                res[n][key]["tilted_robust_dev"]["gamma"].append(threshold - ksd.theta)
                 stat = ksd(X, X, vstat=True) # squared-KSD
                 stat = stat**0.5
                 res[n][key]["tilted_robust_dev"]["nonsq_stat"].append(stat)
@@ -94,24 +94,33 @@ def rej_rate_meanshift(mean_ls, n_ls, nreps, eps0=None, theta="ol", bw=2., alpha
 
                 ksd = metrics.KSD(kernel, score_fn=score_fn)
                 threshold = ksd.test_threshold(n=n, eps0=eps0, theta=theta, alpha=alpha, method="CLT", X=X)
+                # TODO do not save threshold as it depends on theta and needs to be updated when theta is
                 res[n][key]["tilted_robust_clt"]["threshold"].append(threshold)
                 res[n][key]["tilted_robust_clt"]["theta"].append(ksd.theta)
-                # sq_stat = ksd(X, X, vstat=False) # squared-KSD
+                res[n][key]["tilted_robust_clt"]["gamma"].append(np.sqrt(threshold - ksd.theta**2))
                 sq_stat = ksd(X, X, vstat=True) # squared-KSD
+                stat = sq_stat**0.5
+                res[n][key]["tilted_robust_clt"]["nonsq_stat"].append(stat)
                 res[n][key]["tilted_robust_clt"]["stat"].append(sq_stat)
                 res[n][key]["tilted_robust_clt"]["rej"].append(int(sq_stat > threshold))
-                # res[n][key]["tilted_robust_clt"]["rej"].append(int(sq_stat > threshold))
     
     return res
 
-# def change_theta(res, methods, theta):
-#     res["theta"] = theta
-#     for n in res.keys():
-#         for kk in res[n].keys():
-#             for mm in methods:
-#                 res[n][kk][mm]["theta"] = theta
+def change_theta(res, methods, theta):
+    """Given a dictionary of results, change the theta value and the test outcome.
+    """
+    res["theta"] = theta
+    for n in res.keys():
+        if n in ["mean_ls", "theta"]:
+            continue
 
-#                 if mm == "tilted_robust_dev":
-#                     res[n][kk][mm]["rej"] = [int(stat > thres) for stat, thres in zip(res[n][kk][mm])]
-                
-#     return res
+        for kk in res[n].keys():
+            for mm in methods:
+                res[n][kk][mm]["theta"] = [theta] * len(res[n][kk][mm]["theta"])
+
+                if mm == "tilted_robust_dev":
+                    res[n][kk][mm]["rej"] = [int(stat**0.5 > gam + theta) for stat, gam in zip(res[n][kk][mm]["stat"], res[n][kk][mm]["gamma"])]
+                elif mm == "tilted_robust_clt":
+                    res[n][kk][mm]["rej"] = [int(stat**0.5 > np.sqrt(gam**2 + theta**2)) for stat, gam in zip(res[n][kk][mm]["stat"], res[n][kk][mm]["gamma"])]
+    
+    return res
