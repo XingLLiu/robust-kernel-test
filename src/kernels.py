@@ -322,31 +322,11 @@ class TiltedKernel(object):
         return term1 + term2 + term3 + term4
 
 
-# class ScoreWeightFunction(object):
-
-#     def __init__(self, score_fn, b = 0.5):
-#         self.score_fn = score_fn
-#         self.b = b
-#         assert self.b >= 0.5
-
-#     def __call__(self, X):
-#         score = self.score_fn(X) # n, d
-#         score_norm_sq = np.sum(score**2, -1) # n
-#         return np.power(1 + score_norm_sq, -self.b) # n
-
-#     def grad(self, X):
-#         # WRONG! need to have Hessian s_p
-#         score = self.score_fn(X) # n, d
-#         score_norm_sq = np.sum(score**2, -1)
-
-#         res = np.expand_dims(
-#             -2 * self.b * np.power(1 + score_norm_sq, -self.b - 1),
-#             -1,
-#         ) * score # n, d
-#         return res
-    
-
 class PolyWeightFunction(object):
+    """#TODO only works for Gaussian score.
+
+    For an arbitrary score function, need the hessian of score.
+    """
 
     def __init__(self, b = 0.5, loc = 0.):
         self.loc = np.array(loc)

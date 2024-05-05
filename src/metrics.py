@@ -60,7 +60,45 @@ class MMD(Metric):
         K_YX_b = np.transpose(K_XY_b, [0, 2, 1]) # b, m, n
 
         res = K_XX_b + K_YY_b - K_XY_b - K_YX_b # b, n, n
-        res = np.sum(res, [-1, -2]) / n**2 # b
+        res = np.mean(res, [-1, -2]) # b
+        return res
+    
+    def vstat_boot_degenerate(self, X, perm):
+        K_XX = self.kernel(X, X) # n, n
+        K_XY = K_XX # n, m
+        K_YY_b = np.expand_dims(K_XX, 0) # 1, m, m
+        
+        perm_idx_ls = [np.meshgrid(ii, ii) for ii in perm]
+        perm_idx0_ls = [ii[0].T for ii in perm_idx_ls]
+        perm_idx1_ls = [ii[1].T for ii in perm_idx_ls]
+        perm_idx0 = np.stack(perm_idx0_ls)
+        perm_idx1 = np.stack(perm_idx1_ls)
+        K_XX_b = K_XX[perm_idx0, perm_idx1] # b, n, n
+
+        n = X.shape[-2]
+        perm_idx1_cross = np.repeat(
+            np.reshape(np.arange(n, dtype="int"), (1, -1)), repeats=n, axis=0,
+        )
+        perm_idx1_cross = np.expand_dims(perm_idx1_cross, 0)
+        K_XY_b = K_XY[perm_idx0, perm_idx1_cross] # b, n, m
+        K_YX_b = np.transpose(K_XY_b, [0, 2, 1]) # b, m, n
+
+        h_XbXb = K_XX_b + K_YY_b - K_XY_b - K_YX_b # b, n, n
+        # term1 = np.mean(res, [-1, -2]) # b
+
+        # 2
+        term2 = np.mean(h_XbXb, -1) # b, n
+        term2 = np.expand_dims(term2, -1) # b, n, 1
+
+        # 3
+        term3 = np.mean(h_XbXb, -2) # b, n
+        term3 = np.expand_dims(term3, -2) # b, 1, n
+
+        # # 4 is unkown; omitted for now
+        # term4 = 
+
+        res = np.mean(h_XbXb - term2 - term3, [-1, -2]) # b
+
         return res
 
     def symmetric_stat_mat(self, X, Y, Xp, Yp):
@@ -157,7 +195,15 @@ class MMD(Metric):
             boot_stats_Y = efron_boot.compute_bootstrap(X=Y, Y=None)
             boot_stats = np.array(boot_stats_X) + np.array(boot_stats_Y)
             return boot_stats
-        
+
+        elif method == "bootstrap_efron_full_degen":
+            assert Y is not None, "Y must be provided for the full bootstrap."
+            efron_boot = boot.EfronBootstrap(self, nboot=nboot)
+            boot_stats_X = efron_boot.compute_bootstrap_degenerate(X=X, Y=None)
+            boot_stats_Y = efron_boot.compute_bootstrap_degenerate(X=Y, Y=None)
+            boot_stats = np.array(boot_stats_X) + np.array(boot_stats_Y)
+            return boot_stats
+                
     def reverse_test(self, X, Y, theta: float, alpha: float = 0.05, method = "deviation"):
         
         if method == "CLT" or method == "CLT_proper":

@@ -148,8 +148,6 @@ class EfronBootstrap(Bootstrap):
 
         # generate bootstrap samples
         subsize = subsize if subsize is not None else n
-        # idx = np.random.choice(n, size=(self.nboot-1, subsize), replace=True) # b-1, n
-        # idx = np.vstack([np.arange(n), idx]) # b, n # add the original sample
         idx = np.random.choice(n, size=(self.nboot, subsize), replace=True) # b, n
         Xs = X[idx] # b, n, d
         assert Xs.shape == (self.nboot, n, X.shape[-1]), f"Xs shape {Xs.shape} is wrong."
@@ -176,33 +174,37 @@ class EfronBootstrap(Bootstrap):
         """
         assert len(X.shape) == 2, "X cannot be batched."
         n = X.shape[-2]
-        assert n == Y.shape[-2], "X and Y must have the same sample size."
 
         # generate bootstrap samples
         subsize = subsize if subsize is not None else n
-        idx = np.random.choice(n, size=(self.nboot-1, subsize), replace=True) # b-1, n
-        idx = np.vstack([np.arange(n), idx]) # b, n # add the original sample
+        idx = np.random.choice(n, size=(self.nboot, subsize), replace=True) # b, n
+        # idx = np.vstack([np.arange(n), idx]) # b, n # add the original sample
         Xs = X[idx] # b, n, d
         assert Xs.shape == (self.nboot, n, X.shape[-1]), "Xs shape is wrong."
 
-        # work with the stat matrix as a loop
-        boot_stats = []
-        term4 = self.divergence.symmetric_stat_mat(X, Y, X, Y) # n, n
-        term4 = np.sum(term4) / n
-        for ii in idx:
-            assert X[ii].shape == X.shape
+        # 1. vectorised
+        boot_stats = self.divergence.vstat_boot_degenerate(X, idx)
 
-            Xb = X[ii]
-            Yb = Y[ii]
-            term1 = self.divergence.symmetric_stat_mat(Xb, Yb, Xb, Yb) # n, n
-            term2 = self.divergence.symmetric_stat_mat(Xb, Yb, X, Y) # n, n
-            term2 = np.sum(term2, -2, keepdims=True) / n # 1, n
-            term3 = self.divergence.symmetric_stat_mat(X, Y, Xb, Yb) # n, n
-            term3 = np.sum(term3, -1, keepdims=True) / n # n, 1
-
-            summand = term1 - term2 - term3 + term4
-            summand = summand.at[np.diag_indices(n)].set(0.)
-            stat_boot = np.sum(summand) / (n*(n - 1))
-            boot_stats.append(stat_boot)
-        
         return boot_stats
+
+        # # 2. work with the stat matrix as a loop
+        # boot_stats = []
+        # term4 = self.divergence.symmetric_stat_mat(X, Y, X, Y) # n, n
+        # term4 = np.sum(term4) / n
+        # for ii in idx:
+        #     assert X[ii].shape == X.shape
+
+        #     Xb = X[ii]
+        #     Yb = Y[ii]
+        #     term1 = self.divergence.symmetric_stat_mat(Xb, Yb, Xb, Yb) # n, n
+        #     term2 = self.divergence.symmetric_stat_mat(Xb, Yb, X, Y) # n, n
+        #     term2 = np.sum(term2, -2, keepdims=True) / n # 1, n
+        #     term3 = self.divergence.symmetric_stat_mat(X, Y, Xb, Yb) # n, n
+        #     term3 = np.sum(term3, -1, keepdims=True) / n # n, 1
+
+        #     summand = term1 - term2 - term3 + term4
+        #     summand = summand.at[np.diag_indices(n)].set(0.)
+        #     stat_boot = np.sum(summand) / (n*(n - 1))
+        #     boot_stats.append(stat_boot)
+        
+        # return boot_stats
