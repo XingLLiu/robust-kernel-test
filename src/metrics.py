@@ -239,29 +239,24 @@ class KSD(Metric):
             optimizer (tf.optim.Optimizer): [description]
         """
         self.k = kernel
-        assert score_fn is not None or log_prob is not None, "Either score_fn or log_prob must be provided."
         self.score_fn = score_fn
         self.log_prob = log_prob
 
     def __call__(self, X: np.array, Y: np.array, **kwargs):
         return self.u_p(X, Y, **kwargs)
 
-    def vstat(self, X: np.array, Y: np.array, output_dim: int = 2):
-        return self.u_p(X, Y, output_dim=output_dim, vstat=True)
+    def vstat(self, X: np.array, Y: np.array, output_dim: int = 2, scores: np.array = None):
+        return self.u_p(X, Y, output_dim=output_dim, vstat=True, scores=scores)
 
-    def u_p(self, X: np.array, Y: np.array, output_dim: int = 1, vstat: bool = False):
+    def u_p(self, X: np.array, Y: np.array, output_dim: int = 1, vstat: bool = False, scores: np.array = None):
         """
         Inputs:
             X: (..., n, dim)
             Y: (..., m, dim)
         """
-        # # copy data for score computation
-        # X_cp = tf.identity(X)
-        # Y_cp = tf.identity(Y)
-
         # calculate scores using autodiff
-        if self.score_fn is None:
-            raise NotImplementedError("score_fn is not provided.")
+        if self.score_fn is None and scores is None:
+            raise NotImplementedError("Either score_fn or the score values must provided.")
         #   with tf.GradientTape() as g:
         #     g.watch(X_cp)
         #     log_prob_X = self.log_prob(X_cp)
@@ -270,6 +265,10 @@ class KSD(Metric):
         #     g.watch(Y_cp)
         #     log_prob_Y = self.log_prob(Y_cp) # m x dim
         #   score_Y = g.gradient(log_prob_Y, Y_cp)
+        elif scores is not None:
+            assert scores.shape == X.shape
+            score_X = scores
+            score_Y = np.copy(scores)
         else:
             score_X = self.score_fn(X) # n x dim
             score_Y = self.score_fn(Y) # m x dim

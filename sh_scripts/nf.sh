@@ -1,0 +1,1 @@
+taskset -c 0-30 python3 experiments/nf.py
