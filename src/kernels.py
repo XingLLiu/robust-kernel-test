@@ -340,7 +340,7 @@ class PolyWeightFunction(object):
     def __call__(self, X):
         # print("X", X.shape)
         # print("loc", self.loc.shape, self.loc)
-        assert np.squeeze(X[-2]).shape == np.squeeze(self.loc).shape
+        assert np.squeeze(X[0]).shape == np.squeeze(self.loc).shape
 
         score_norm_sq = np.sum((X - self.loc)**2, -1) # n
         return np.power(1 + score_norm_sq, -self.b) # n
@@ -352,4 +352,34 @@ class PolyWeightFunction(object):
             np.power(1 + score_norm_sq, -self.b - 1),
             -1,
         ) * (X - self.loc) # n, d
+        return res
+    
+class ScoreWeightFunction(object):
+    """#TODO only works for Gaussian score.
+
+    For an arbitrary score function, need the hessian of score.
+    """
+
+    def __init__(self, b = 0.5, loc = 0.):
+        self.loc = np.array(loc)
+        self.b = b
+        assert self.b >= 0.5
+
+        self.weighted_score_sup = 1. #TODO assuming Gaussian score
+        self.sup = 1.
+        self.derivative_sup = 2. * self.b
+
+    def __call__(self, X, score, hvp):
+        assert np.squeeze(X[0]).shape == np.squeeze(self.loc).shape
+
+        score_norm_sq = np.sum(score**2, -1) # n
+        return np.power(1 + score_norm_sq, -self.b) # n
+
+    def grad(self, X, score, hvp):
+        score_norm_sq = np.sum(score**2, -1) # n
+
+        res = -2 * self.b * np.expand_dims(
+            np.power(1 + score_norm_sq, -self.b - 1),
+            -1,
+        ) * hvp # n, d
         return res

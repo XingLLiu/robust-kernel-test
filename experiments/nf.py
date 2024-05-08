@@ -6,14 +6,13 @@ import numpy as np
 
 ## Imports for plotting
 import matplotlib.pyplot as plt
-from IPython.display import set_matplotlib_formats
-set_matplotlib_formats('svg', 'pdf') # For export
-from matplotlib.colors import to_rgb
 import matplotlib
 matplotlib.rcParams['lines.linewidth'] = 2.0
 import seaborn as sns
 sns.reset_orig()
+
 import pickle
+import argparse
 
 ## Progress bar
 from tqdm import tqdm, trange
@@ -555,18 +554,22 @@ def sample_preprocess(n):
     return samples
 
 def compute_score_NF(sample):
-    sample = (
-        torch.tensor(sample, dtype=torch.float64)
-        .to(torch.float64)
-        .reshape([1, 1, 28, 28])
-        .clone()
-        .detach()
-        .requires_grad_(True)
-    )
+    if not isinstance(sample, torch.Tensor):
+        sample = (
+            torch.tensor(sample, dtype=torch.float64)
+            .to(torch.float64)
+            .reshape([1, 1, 28, 28])
+            .clone()
+            .detach()
+            .requires_grad_(True)
+        )
+    else:
+        sample = sample.reshape([1, 1, 28, 28]).requires_grad_(True)
+
     log_px = flow_model._get_likelihood(sample, return_ll=True)
     log_px.backward()
     grad_log_px = sample.grad
-    return grad_log_px.cpu().detach().numpy().reshape(1, 28 ** 2)
+    return grad_log_px.cpu().detach().numpy().reshape((28 ** 2,))
 
 def inject_noise(samples, std, mean=0., xpos=[0, 5], ypos=[0, 5]):
     samples = np.copy(samples.reshape([-1, 1, 28, 28]))
@@ -577,32 +580,103 @@ def inject_noise(samples, std, mean=0., xpos=[0, 5], ypos=[0, 5]):
     samples = samples.reshape([-1, 28**2])
     return samples
 
+def sample_and_inject_noise(n, std_ls, xpos=[0, 5], ypos=[0, 5]):
+    samples = flow_model.sample(img_shape=[n, 8, 7, 7]).to(torch.float64)
+
+    res = {}
+    for std in std_ls:
+        samples_cp = torch.clone(samples)
+        noise = (
+            torch.randn(size=[samples.shape[0], xpos[-1]-xpos[0], ypos[-1]-ypos[0]]) * std
+        )**2
+        samples_cp[:, 0, xpos[0]:xpos[-1], ypos[0]:ypos[-1]] = samples[:, 0, xpos[0]:xpos[-1], ypos[0]:ypos[-1]] + np.floor(
+            noise
+        )
+        torch.clip(samples_cp, 0., 255., out=samples_cp)
+        res[std] = samples_cp
+    
+    return res
+
+def compute_score_and_hvp(sample, seed):
+    # 1. compute score
+    if not isinstance(sample, torch.Tensor):
+        sample = (
+            torch.tensor(sample, dtype=torch.float64)
+            .to(torch.float64)
+            .reshape([1, 1, 28, 28])
+            .clone()
+            .detach()
+            .requires_grad_(True)
+        )
+    else:
+        sample = sample.reshape([1, 1, 28, 28]).requires_grad_(True)
+
+    pl.seed_everything(seed)
+    log_px = flow_model._get_likelihood(sample, return_ll=True)
+    log_px.backward()
+    grad_log_px = sample.grad.detach().reshape((28 ** 2,))
+
+    # 2. compute hvp
+    pl.seed_everything(seed)
+    sample = sample.detach().requires_grad_(True).reshape((28 ** 2))
+    log_px2, hes_vec = torch.autograd.functional.hvp(
+        lambda x: flow_model._get_likelihood(x.reshape([1, 1, 28, 28]), return_ll=True), 
+        sample, 
+        grad_log_px,
+    )
+
+    assert torch.allclose(log_px, log_px2), "Two log_px are not equal"
+    
+    return grad_log_px.cpu().detach().numpy(), hes_vec.cpu().detach().numpy().reshape((28 ** 2,))
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--n", type=int)
+parser.add_argument("--nrep", type=int)
+parser.add_argument("--seed", type=int)
+parser.add_argument("--param_boot", type=bool, default=False)
+args = parser.parse_args()
+
 
 if __name__ == "__main__":
     flow_model, _ = train_flow(create_multiscale_flow(), model_name="MNISTFlow_multiscale")
 
-    pl.seed_everything(42)
+    pl.seed_everything(args.seed)
+    nrep = args.nrep
+    n = args.n
 
-    std_ls = [0., 1., 5., 10., 20., 50., 100.]
-    samples_res = {ss: [] for ss in std_ls}
-    scores_res = {ss: [] for ss in std_ls}
+    if args.param_boot:
+        filename = "param/"
+        std_ls = [0.]
+        seed_base = args.seed * 9 + 1000
+    else:
+        filename = ""
+        std_ls = [0., 1., 5., 10., 20., 50., 100.]
+        seed_base = args.seed * 9
 
-    n = 1000
-    samples = sample_preprocess(n)
-    samples_res[0.] = samples.astype(np.float64)
-    for std in std_ls:
-        pert_samples = inject_noise(samples, std=std, xpos=[0, 5], ypos=[0, 5])
-        samples_res[std] = pert_samples.astype(np.float64)
+    samples_res = {ss: np.empty([nrep, n, 28 ** 2]) for ss in std_ls}
+    scores_res = {ss: np.empty([nrep, n, 28 ** 2]) for ss in std_ls}
+    hvp_res = {ss: np.empty([nrep, n, 28 ** 2]) for ss in std_ls}
 
-    for i in trange(n):
+    for j in range(nrep):
+        pert_samples = sample_and_inject_noise(n, std_ls)
         for std in std_ls:
-            sample = samples_res[std][i]
-            score = compute_score_NF(sample)
-            scores_res[std].append(score)
+            samples_res[std][j] = pert_samples[std].cpu().detach().numpy().reshape([-1, 28 ** 2])
 
-    for std in std_ls:
-        scores_res[std] = np.squeeze(np.array(scores_res[std], dtype=np.float64), -2)
+        iterator = trange(n)
+        for i in iterator:
+            iterator.set_description(f"Rep [{j+1} / {nrep}]")
+
+            seed = i + j * n * 100 + seed_base
+
+            for std in std_ls:
+                sample = pert_samples[std][i]
+
+                score, hvp = compute_score_and_hvp(sample, seed)
+                scores_res[std][j, i] = score
+                hvp_res[std][j, i] = hvp
 
     # save
-    pickle.dump(samples_res, open(os.path.join(DATASET_PATH, "nf/samples_res.pkl"), "wb"))
-    pickle.dump(scores_res, open(os.path.join(DATASET_PATH, "nf/scores_res.pkl"), "wb"))
+    pickle.dump(samples_res, open(os.path.join(DATASET_PATH, f"nf/{filename}samples_res_n{n}_seed{args.seed}.pkl"), "wb"))
+    pickle.dump(scores_res, open(os.path.join(DATASET_PATH, f"nf/{filename}scores_res_n{n}_seed{args.seed}.pkl"), "wb"))
+    pickle.dump(hvp_res, open(os.path.join(DATASET_PATH, f"nf/{filename}hvp_res_n{n}_seed{args.seed}.pkl"), "wb"))
