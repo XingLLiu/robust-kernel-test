@@ -1,6 +1,7 @@
 import numpy as np
 import scipy.stats as sci_stats
 import src.bootstrap as boot
+import src.kernels as kernels
 
 
 class Metric:
@@ -245,17 +246,17 @@ class KSD(Metric):
     def __call__(self, X: np.array, Y: np.array, **kwargs):
         return self.u_p(X, Y, **kwargs)
 
-    def vstat(self, X: np.array, Y: np.array, output_dim: int = 2, scores: np.array = None):
-        return self.u_p(X, Y, output_dim=output_dim, vstat=True, scores=scores)
+    def vstat(self, X: np.array, Y: np.array, output_dim: int = 2, score: np.array = None, hvp: np.array = None):
+        return self.u_p(X, Y, output_dim=output_dim, vstat=True, score=score, hvp=hvp)
 
-    def u_p(self, X: np.array, Y: np.array, output_dim: int = 1, vstat: bool = False, scores: np.array = None):
+    def u_p(self, X: np.array, Y: np.array, output_dim: int = 1, vstat: bool = False, score: np.array = None, hvp: np.array = None):
         """
         Inputs:
             X: (..., n, dim)
             Y: (..., m, dim)
         """
         # calculate scores using autodiff
-        if self.score_fn is None and scores is None:
+        if self.score_fn is None and score is None:
             raise NotImplementedError("Either score_fn or the score values must provided.")
         #   with tf.GradientTape() as g:
         #     g.watch(X_cp)
@@ -265,10 +266,10 @@ class KSD(Metric):
         #     g.watch(Y_cp)
         #     log_prob_Y = self.log_prob(Y_cp) # m x dim
         #   score_Y = g.gradient(log_prob_Y, Y_cp)
-        elif scores is not None:
-            assert scores.shape == X.shape
-            score_X = scores
-            score_Y = np.copy(scores)
+        elif score is not None:
+            assert score.shape == X.shape
+            score_X = score
+            score_Y = np.copy(score)
         else:
             score_X = self.score_fn(X) # n x dim
             score_Y = self.score_fn(Y) # m x dim
@@ -279,22 +280,30 @@ class KSD(Metric):
             self.k.bandwidth(X, Y)
 
         # kernel
-        K_XY = self.k(X, Y) # n x m
+        if isinstance(self.k, kernels.TiltedKernel):
+            K_XY = self.k(X, Y, score_X=score_X, score_Y=score_Y) # n x m
+            grad_K_Y = self.k.grad_second(X, Y, score_X=score_X, score_Y=score_Y, hvp_Y=hvp) # n x m x dim
+            grad_K_X = self.k.grad_first(X, Y, score_X=score_X, score_Y=score_Y, hvp_X=hvp) # n x m x dim
+            gradgrad_K = self.k.gradgrad(X, Y, score_X=score_X, score_Y=score_Y, hvp_X=hvp, hvp_Y=hvp) # n x m
+
+        else:
+            K_XY = self.k(X, Y) # n x m
+            grad_K_Y = self.k.grad_second(X, Y) # n x m x dim
+            grad_K_X = self.k.grad_first(X, Y) # n x m x dim
+            gradgrad_K = self.k.gradgrad(X, Y) # n x m
 
         # term 1
         term1_mat = np.matmul(score_X, np.moveaxis(score_Y, (-1, -2), (-2, -1))) * K_XY # n x m
         # term 2
-        grad_K_Y = self.k.grad_second(X, Y) # n x m x dim
         term2_mat = np.expand_dims(score_X, -2) * grad_K_Y # n x m x dim
         term2_mat = np.sum(term2_mat, axis=-1)
 
         # term3
-        grad_K_X = self.k.grad_first(X, Y) # n x m x dim
         term3_mat = np.expand_dims(score_Y, -3) * grad_K_X # n x m x dim
         term3_mat = np.sum(term3_mat, axis=-1)
 
         # term4
-        term4_mat = self.k.gradgrad(X, Y) # n x m
+        term4_mat = gradgrad_K
 
         assert term1_mat.shape[-2:] == (X.shape[-2], Y.shape[-2])
         assert term2_mat.shape[-2:] == (X.shape[-2], Y.shape[-2])
@@ -320,7 +329,7 @@ class KSD(Metric):
 
     def test_threshold(
             self, n: int, eps0: float = None, theta: float = None, alpha: float = 0.05, method: str = "deviation",
-            X: np.array = None,
+            X: np.array = None, score=None, hvp=None,
         ):
         """
         Compute the threshold for the robust test. Threshold = \gamma + \theta.
@@ -374,17 +383,17 @@ class KSD(Metric):
         elif method == "CLT":
             assert X is not None, "X must be provided for the CLT threshold."
             norm_q = sci_stats.norm.ppf(1 - alpha)
-            var_hat = self.jackknife(X, X)
+            var_hat = self.jackknife(X, score=score, hvp=hvp)
             term1 = 2 * var_hat**0.5 * norm_q / np.sqrt(n)
             # threshold = np.sqrt(term1 + theta**2)
             threshold = term1 + theta**2
 
         return threshold
 
-    def jackknife(self, X, Y):
+    def jackknife(self, X, score=None, hvp=None):
         n = X.shape[-2]
 
-        u_p = self.vstat(X, Y, output_dim=2) # n, n
+        u_p = self.vstat(X, X, output_dim=2, score=score, hvp=hvp) # n, n
         
         # u-stat
         u_stat_mat = u_p.at[np.diag_indices(u_p.shape[0])].set(0.)

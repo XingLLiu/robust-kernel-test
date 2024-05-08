@@ -16,14 +16,14 @@ class Bootstrap:
     def compute_bootstrap(self, X, Y):
         raise NotImplementedError
 
-    def pval(self, X, Y: np.array = None, return_boot: bool = False, return_stat: bool = False, scores: np.ndarray = None):
+    def pval(self, X, Y: np.array = None, return_boot: bool = False, return_stat: bool = False, score: np.ndarray = None, hvp: np.array = None):
         """
         Compute the p-value for the MMD test.
 
         @param X: numpy array of shape (n, d)
         @param Y: numpy array of shape (m, d)
         """
-        boot_stats, test_stat = self.compute_bootstrap(X, Y, scores=scores)
+        boot_stats, test_stat = self.compute_bootstrap(X, Y, score=score, hvp=hvp)
         pval = (1. + np.sum(boot_stats > test_stat)) / (self.ndraws + 1)
         if not return_boot and not return_stat:
             return pval
@@ -45,7 +45,7 @@ class WildBootstrap(Bootstrap):
         self.divergence = divergence
         self.ndraws = ndraws
 
-    def compute_bootstrap(self, X, Y, scores: np.ndarray = None):
+    def compute_bootstrap(self, X, Y, score: np.ndarray = None, hvp: np.array = None):
         """
         Compute the threshold for the MMD test.
 
@@ -59,7 +59,7 @@ class WildBootstrap(Bootstrap):
         r = np.random.choice([-1, 1], size=(self.ndraws, n)) # b, n
 
         # compute test stat
-        vstat = self.divergence.vstat(X, Y, scores=scores) # n, n
+        vstat = self.divergence.vstat(X, Y, score=score, hvp=hvp) # n, n
         test_stat = np.sum(vstat) / (n**2)
 
         # compute bootstrap stats

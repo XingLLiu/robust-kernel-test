@@ -240,7 +240,7 @@ class TiltedKernel(object):
         self.weight_fn = weight_fn
         self.med_heuristic = None
 
-    def __call__(self, X, Y):
+    def __call__(self, X, Y, score_X = None, score_Y = None):
         """
         Args:
             X: tf.Tensor of shape (..., n, dim)
@@ -249,30 +249,27 @@ class TiltedKernel(object):
             tf.Tensor of shape (..., n, m)
         """
         K_XY = self.kernel(X, Y) # n, m
-        W_X = self.weight_fn(X) # n
-        W_Y = self.weight_fn(Y) # m
+        W_X = self.weight_fn(X, score_X) # n
+        W_Y = self.weight_fn(Y, score_Y) # m
         res = np.expand_dims(W_X, -1) * K_XY * np.expand_dims(W_Y, -2) # n, m
         return res
 
-    def grad_first(self, X, Y):
+    def grad_first(self, X, Y, score_X = None, score_Y = None, hvp_X = None):
         """
         Compute grad_K in wrt first argument in matrix form 
         """
         K = self.kernel(X, Y)
-        W_X = self.weight_fn(X)
-        W_Y = self.weight_fn(Y)
+        W_X = self.weight_fn(X, score_X)
+        W_Y = self.weight_fn(Y, score_Y)
         grad_K_XY = self.kernel.grad_first(X, Y)
-        grad_W_X = self.weight_fn.grad(X) # n, d
+        grad_W_X = self.weight_fn.grad(X, score_X, hvp_X) # n, d
         W_Y_pd = np.expand_dims(np.expand_dims(W_Y, -2), -1) # 1, m, 1
 
         term1 = np.expand_dims(grad_W_X, -2) * np.expand_dims(K, -1) * W_Y_pd # n, m, d
         term2 = W_X[..., np.newaxis, np.newaxis] * grad_K_XY * W_Y_pd # n, m, d
-
-        # print("grad_first", (term1 + term2)[:3, :3, 0])
-
         return term1 + term2
 
-    def grad_second(self, X, Y):
+    def grad_second(self, X, Y, score_X = None, score_Y = None, hvp_Y = None):
         """
         Compute grad_K in wrt second argument in matrix form.
         Args:
@@ -282,20 +279,19 @@ class TiltedKernel(object):
             tf.Tensor of shape (..., n, m, dim)
         """
         K = self.kernel(X, Y)
-        W_X = self.weight_fn(X)
-        W_Y = self.weight_fn(Y)
+        W_X = self.weight_fn(X, score_X)
+        W_Y = self.weight_fn(Y, score_Y)
         grad_K_XY = self.kernel.grad_second(X, Y) # n, m, d
-        grad_W_Y = self.weight_fn.grad(Y) # m, d
+        grad_W_Y = self.weight_fn.grad(Y, score_Y, hvp_Y) # m, d
         W_X_pd = W_X[..., np.newaxis, np.newaxis] # n, 1, 1
 
         term1 = W_X_pd * grad_K_XY * np.expand_dims(
             np.expand_dims(W_Y, -2), -1
         ) # n, m, d
         term2 = W_X_pd * np.expand_dims(K, -1) * np.expand_dims(grad_W_Y, -3) # n, m, d
-        # print("grad_second", (term1 + term2)[:3, :3, 0])
         return term1 + term2
 
-    def gradgrad(self, X, Y):
+    def gradgrad(self, X, Y, score_X = None, score_Y = None, hvp_X = None, hvp_Y = None):
         """
         Compute trace(\nabla_x \nabla_y k(x, y)).
         """
@@ -304,14 +300,14 @@ class TiltedKernel(object):
         grad_K_Y = self.kernel.grad_second(X, Y) # n, m, d
         gradgrad_K = self.kernel.gradgrad(X, Y) # n, m
         
-        W_X = self.weight_fn(X)
+        W_X = self.weight_fn(X, score_X)
         W_X_pd = np.expand_dims(W_X, -1) # n, 1
-        W_Y = self.weight_fn(Y)
+        W_Y = self.weight_fn(Y, score_Y)
         W_Y_pd = np.expand_dims(W_Y, -2) # 1, m
 
-        grad_W_X = self.weight_fn.grad(X) # n, d
+        grad_W_X = self.weight_fn.grad(X, score_X, hvp_X) # n, d
         grad_W_X_pd = np.expand_dims(grad_W_X, -2) # n, 1, d
-        grad_W_Y = self.weight_fn.grad(Y) # m, d
+        grad_W_Y = self.weight_fn.grad(Y, score_Y, hvp_Y) # m, d
         grad_W_Y_pd = np.expand_dims(grad_W_Y, -3) # 1, m, d
 
         term1 = np.sum(grad_W_X_pd * grad_K_Y, -1) * W_Y_pd # n, m
@@ -322,7 +318,14 @@ class TiltedKernel(object):
         return term1 + term2 + term3 + term4
 
 
-class PolyWeightFunction(object):
+class WeightFunction(object):
+    def __call__(self, X, score):
+        raise NotImplementedError
+
+    def grad(self, X, score, hvp):
+        raise NotImplementedError
+
+class PolyWeightFunction(WeightFunction):
     """#TODO only works for Gaussian score.
 
     For an arbitrary score function, need the hessian of score.
@@ -337,15 +340,13 @@ class PolyWeightFunction(object):
         self.sup = 1.
         self.derivative_sup = 2. * self.b
 
-    def __call__(self, X):
-        # print("X", X.shape)
-        # print("loc", self.loc.shape, self.loc)
+    def __call__(self, X, score):
         assert np.squeeze(X[0]).shape == np.squeeze(self.loc).shape
 
         score_norm_sq = np.sum((X - self.loc)**2, -1) # n
         return np.power(1 + score_norm_sq, -self.b) # n
 
-    def grad(self, X):
+    def grad(self, X, score, hvp):
         score_norm_sq = np.sum((X - self.loc)**2, -1)
 
         res = -2 * self.b * np.expand_dims(
@@ -354,28 +355,31 @@ class PolyWeightFunction(object):
         ) * (X - self.loc) # n, d
         return res
     
-class ScoreWeightFunction(object):
-    """#TODO only works for Gaussian score.
-
+class ScoreWeightFunction(WeightFunction):
+    """
     For an arbitrary score function, need the hessian of score.
     """
 
-    def __init__(self, b = 0.5, loc = 0.):
-        self.loc = np.array(loc)
+    def __init__(self, hvp_denom_sup, b = 0.5):
+        """
+        @param hvp_denom_sup: sup_x \| Jsp_x sp_x \|_2 (1 + \| sp_x \|_2^2)^{-b - 1}
+        """
         self.b = b
         assert self.b >= 0.5
 
-        self.weighted_score_sup = 1. #TODO assuming Gaussian score
+        self.weighted_score_sup = 1.
         self.sup = 1.
-        self.derivative_sup = 2. * self.b
+        self.derivative_sup = hvp_denom_sup * 2. * self.b
 
-    def __call__(self, X, score, hvp):
-        assert np.squeeze(X[0]).shape == np.squeeze(self.loc).shape
+    def __call__(self, X, score):
+        assert X.shape == score.shape
 
         score_norm_sq = np.sum(score**2, -1) # n
         return np.power(1 + score_norm_sq, -self.b) # n
 
     def grad(self, X, score, hvp):
+        assert X.shape == hvp.shape
+        
         score_norm_sq = np.sum(score**2, -1) # n
 
         res = -2 * self.b * np.expand_dims(

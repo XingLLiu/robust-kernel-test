@@ -125,10 +125,10 @@ def change_theta(res, methods, theta):
     
     return res
 
-def run_tests(samples, scores, hvps, theta="ol", bw="med", alpha=0.05, verbose=False):
+def run_tests(samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=None, alpha=0.05, verbose=False):
     res = {
-        "rbf": {"stat": [], "pval": [], "rej": [], "boot_stats": []},
-        "tilted": {"stat": [], "pval": [], "rej": [], "boot_stats": []},
+        "rbf": {"nonsq_stat": [], "stat": [], "pval": [], "rej": [], "boot_stats": []},
+        "tilted": {"nonsq_stat": [], "stat": [], "pval": [], "rej": [], "boot_stats": []},
         "tilted_robust_dev": {"nonsq_stat": [], "stat": [], "threshold": [], "rej": [], "theta": [], "gamma": []},
         "tilted_robust_clt": {"nonsq_stat": [], "stat": [], "threshold": [], "rej": [], "theta": [], "gamma": []},
     }
@@ -144,6 +144,7 @@ def run_tests(samples, scores, hvps, theta="ol", bw="med", alpha=0.05, verbose=F
         if hvps is not None:
             hvp = hvps[i]
         
+        n = X.shape[-2]
         kernel_args = {"sigma_sq": None, "med_heuristic": True, "X": X, "Y": X} if bw == "med" else {"sigma_sq": bw}
 
         # 1. RBF
@@ -151,72 +152,75 @@ def run_tests(samples, scores, hvps, theta="ol", bw="med", alpha=0.05, verbose=F
 
         ksd = metrics.KSD(kernel)
         wild_boot = boot.WildBootstrap(ksd)
-        pval, stat, boot_stats = wild_boot.pval(X, X, return_stat=True, return_boot=True, scores=score)
+        pval, stat, boot_stats = wild_boot.pval(X, X, return_stat=True, return_boot=True, score=score)
         res["rbf"]["stat"].append(stat)
+        res["rbf"]["nonsq_stat"].append(stat**0.5)
         res["rbf"]["pval"].append(pval)
         res["rbf"]["rej"].append(int(pval < alpha))
         res["rbf"]["boot_stats"].append(boot_stats)
 
-        # # tilted
-        # score_weight_fn = kernels.PolyWeightFunction(loc=mean2)
-        # kernel0 = kernels.RBF(**kernel_args)
-        # kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
+        # 2. tilted
+        score_weight_fn = kernels.ScoreWeightFunction(hvp_denom_sup=hvp_denom_sup)
+        kernel0 = kernels.RBF(**kernel_args)
+        kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
 
-        # ksd = metrics.KSD(kernel, score_fn=score_fn)
-        # wild_boot = boot.WildBootstrap(ksd)
-        # pval, stat, boot_stats = wild_boot.pval(X, X, return_stat=True, return_boot=True)
-        # res[n][key]["tilted"]["stat"].append(stat)
-        # res[n][key]["tilted"]["pval"].append(pval)
-        # res[n][key]["tilted"]["rej"].append(int(pval < alpha))
-        # res[n][key]["tilted"]["boot_stats"].append(boot_stats)
+        ksd = metrics.KSD(kernel)
+        wild_boot = boot.WildBootstrap(ksd)
+        pval, stat, boot_stats = wild_boot.pval(X, X, return_stat=True, return_boot=True, score=score, hvp=hvp)
+        res["tilted"]["stat"].append(stat)
+        res["tilted"]["nonsq_stat"].append(stat**0.5)
+        res["tilted"]["pval"].append(pval)
+        res["tilted"]["rej"].append(int(pval < alpha))
+        res["tilted"]["boot_stats"].append(boot_stats)
 
+        # 3. tilted ol robust
+        if eps0 is not None:
+            score_weight_fn = kernels.ScoreWeightFunction(hvp_denom_sup=hvp_denom_sup)
+            kernel0 = kernels.RBF(**kernel_args)
+            kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
 
-        # # tilted ol robust
-        # if eps0 is not None:
-        #     score_weight_fn = kernels.PolyWeightFunction(loc=mean2)
-        #     kernel0 = kernels.RBF(**kernel_args)
-        #     kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
-
-        #     ksd = metrics.KSD(kernel, score_fn=score_fn)
-        #     threshold = ksd.test_threshold(n=n, eps0=eps0, alpha=alpha, method="ol_robust")
-        #     res[n][key]["tilted_ol_robust"]["threshold"].append(threshold)
-        #     stat = ksd(X, X, vstat=True) # squared-KSD
-        #     stat = stat**0.5
-        #     res[n][key]["tilted_ol_robust"]["nonsq_stat"].append(stat)
-        #     res[n][key]["tilted_ol_robust"]["stat"].append(stat**2)
-        #     res[n][key]["tilted_ol_robust"]["rej"].append(int(stat > threshold))
+            ksd = metrics.KSD(kernel)
+            threshold = ksd.test_threshold(n=n, eps0=eps0, alpha=alpha, method="ol_robust")
+            res["tilted_ol_robust"]["threshold"].append(threshold)
+            stat = ksd(X, X, vstat=True) # squared-KSD
+            stat = stat**0.5
+            res["tilted_ol_robust"]["nonsq_stat"].append(stat)
+            res["tilted_ol_robust"]["stat"].append(stat**2)
+            res["tilted_ol_robust"]["rej"].append(int(stat > threshold))
         
-        # # tilted ball robust
-        # score_weight_fn = kernels.PolyWeightFunction(loc=mean2)
-        # kernel0 = kernels.RBF(**kernel_args)
-        # kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
+        # 4. tilted ball robust
+        score_weight_fn = kernels.ScoreWeightFunction(hvp_denom_sup=hvp_denom_sup)
+        kernel0 = kernels.RBF(**kernel_args)
+        kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
 
-        # ksd = metrics.KSD(kernel, score_fn=score_fn)
-        # threshold = ksd.test_threshold(n=n, eps0=eps0, theta=theta, alpha=alpha, method="ball_robust")
-        # res[n][key]["tilted_robust_dev"]["threshold"].append(threshold)
-        # res[n][key]["tilted_robust_dev"]["theta"].append(ksd.theta)
-        # res[n][key]["tilted_robust_dev"]["gamma"].append(threshold - ksd.theta)
-        # stat = ksd(X, X, vstat=True) # squared-KSD
-        # stat = stat**0.5
-        # res[n][key]["tilted_robust_dev"]["nonsq_stat"].append(stat)
-        # res[n][key]["tilted_robust_dev"]["stat"].append(stat**2)
-        # res[n][key]["tilted_robust_dev"]["rej"].append(int(stat > threshold))
+        ksd = metrics.KSD(kernel)
+        threshold = ksd.test_threshold(n=n, eps0=eps0, theta=theta, alpha=alpha, method="ball_robust")
+        res["tilted_robust_dev"]["threshold"].append(threshold)
+        res["tilted_robust_dev"]["theta"].append(ksd.theta)
+        res["tilted_robust_dev"]["gamma"].append(threshold - ksd.theta)
+        stat = ksd(X, X, vstat=True, score=score, hvp=hvp) # squared-KSD
+        stat = stat**0.5
+        res["tilted_robust_dev"]["nonsq_stat"].append(stat)
+        res["tilted_robust_dev"]["stat"].append(stat**2)
+        res["tilted_robust_dev"]["rej"].append(int(stat > threshold))
 
         # # tilted ball robust CLT
-        # score_weight_fn = kernels.PolyWeightFunction(loc=mean2)
-        # kernel0 = kernels.RBF(**kernel_args)
-        # kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
+        score_weight_fn = kernels.ScoreWeightFunction(hvp_denom_sup=hvp_denom_sup)
+        kernel0 = kernels.RBF(**kernel_args)
+        kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
 
-        # ksd = metrics.KSD(kernel, score_fn=score_fn)
-        # threshold = ksd.test_threshold(n=n, eps0=eps0, theta=theta, alpha=alpha, method="CLT", X=X)
-        # # TODO do not save threshold as it depends on theta and needs to be updated when theta is
-        # res[n][key]["tilted_robust_clt"]["threshold"].append(threshold)
-        # res[n][key]["tilted_robust_clt"]["theta"].append(ksd.theta)
-        # res[n][key]["tilted_robust_clt"]["gamma"].append(np.sqrt(threshold - ksd.theta**2))
-        # sq_stat = ksd(X, X, vstat=True) # squared-KSD
-        # stat = sq_stat**0.5
-        # res[n][key]["tilted_robust_clt"]["nonsq_stat"].append(stat)
-        # res[n][key]["tilted_robust_clt"]["stat"].append(sq_stat)
-        # res[n][key]["tilted_robust_clt"]["rej"].append(int(sq_stat > threshold))
+        ksd = metrics.KSD(kernel)
+        threshold = ksd.test_threshold(
+            n=n, eps0=eps0, theta=theta, alpha=alpha, method="CLT", X=X, score=score, hvp=hvp
+        )
+        # TODO do not save threshold as it depends on theta and needs to be updated when theta is
+        res["tilted_robust_clt"]["threshold"].append(threshold)
+        res["tilted_robust_clt"]["theta"].append(ksd.theta)
+        res["tilted_robust_clt"]["gamma"].append(np.sqrt(threshold - ksd.theta**2))
+        sq_stat = ksd(X, X, vstat=True, score=score, hvp=hvp) # squared-KSD
+        stat = sq_stat**0.5
+        res["tilted_robust_clt"]["nonsq_stat"].append(stat)
+        res["tilted_robust_clt"]["stat"].append(sq_stat)
+        res["tilted_robust_clt"]["rej"].append(int(sq_stat > threshold))
     
     return res
