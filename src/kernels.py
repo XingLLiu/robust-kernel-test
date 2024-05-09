@@ -236,7 +236,7 @@ class TiltedKernel(object):
 
     def __init__(self, kernel, weight_fn):
         super().__init__()
-        self.kernel = kernel
+        self.base_kernel = kernel
         self.weight_fn = weight_fn
         self.med_heuristic = None
 
@@ -248,7 +248,7 @@ class TiltedKernel(object):
         Output:
             tf.Tensor of shape (..., n, m)
         """
-        K_XY = self.kernel(X, Y) # n, m
+        K_XY = self.base_kernel(X, Y) # n, m
         W_X = self.weight_fn(X, score_X) # n
         W_Y = self.weight_fn(Y, score_Y) # m
         res = np.expand_dims(W_X, -1) * K_XY * np.expand_dims(W_Y, -2) # n, m
@@ -258,10 +258,10 @@ class TiltedKernel(object):
         """
         Compute grad_K in wrt first argument in matrix form 
         """
-        K = self.kernel(X, Y)
+        K = self.base_kernel(X, Y)
         W_X = self.weight_fn(X, score_X)
         W_Y = self.weight_fn(Y, score_Y)
-        grad_K_XY = self.kernel.grad_first(X, Y)
+        grad_K_XY = self.base_kernel.grad_first(X, Y)
         grad_W_X = self.weight_fn.grad(X, score_X, hvp_X) # n, d
         W_Y_pd = np.expand_dims(np.expand_dims(W_Y, -2), -1) # 1, m, 1
 
@@ -278,10 +278,10 @@ class TiltedKernel(object):
         Output:
             tf.Tensor of shape (..., n, m, dim)
         """
-        K = self.kernel(X, Y)
+        K = self.base_kernel(X, Y)
         W_X = self.weight_fn(X, score_X)
         W_Y = self.weight_fn(Y, score_Y)
-        grad_K_XY = self.kernel.grad_second(X, Y) # n, m, d
+        grad_K_XY = self.base_kernel.grad_second(X, Y) # n, m, d
         grad_W_Y = self.weight_fn.grad(Y, score_Y, hvp_Y) # m, d
         W_X_pd = W_X[..., np.newaxis, np.newaxis] # n, 1, 1
 
@@ -295,10 +295,10 @@ class TiltedKernel(object):
         """
         Compute trace(\nabla_x \nabla_y k(x, y)).
         """
-        K = self.kernel(X, Y)
-        grad_K_X = self.kernel.grad_first(X, Y) # n, m, d
-        grad_K_Y = self.kernel.grad_second(X, Y) # n, m, d
-        gradgrad_K = self.kernel.gradgrad(X, Y) # n, m
+        K = self.base_kernel(X, Y)
+        grad_K_X = self.base_kernel.grad_first(X, Y) # n, m, d
+        grad_K_Y = self.base_kernel.grad_second(X, Y) # n, m, d
+        gradgrad_K = self.base_kernel.gradgrad(X, Y) # n, m
         
         W_X = self.weight_fn(X, score_X)
         W_X_pd = np.expand_dims(W_X, -1) # n, 1

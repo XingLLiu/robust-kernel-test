@@ -334,17 +334,17 @@ class KSD(Metric):
         """
         Compute the threshold for the robust test. Threshold = \gamma + \theta.
         """
-        h_zero, gradgrad_h_zero = self.k.kernel.eval_zero()
+        h_zero, gradgrad_h_zero = self.k.base_kernel.eval_zero()
         ws_sup = self.k.weight_fn.weighted_score_sup
         m_sup = self.k.weight_fn.sup
         grad_m_sup = self.k.weight_fn.derivative_sup
         tau = (ws_sup**2 + 2 * ws_sup * grad_m_sup + grad_m_sup**2) * h_zero + m_sup**2 * gradgrad_h_zero
         self.tau = tau
 
-        k_sup = self.k.kernel.sup
-        grad_k_first_sup = self.k.kernel.grad_first_sup
-        grad_k_second_sup = self.k.kernel.grad_second_sup
-        gradgrad_k_sup = self.k.kernel.gradgrad_sup
+        k_sup = self.k.base_kernel.sup
+        grad_k_first_sup = self.k.base_kernel.grad_first_sup
+        grad_k_second_sup = self.k.base_kernel.grad_second_sup
+        gradgrad_k_sup = self.k.base_kernel.gradgrad_sup
         tau_star = (ws_sup**2 * k_sup + 
             ws_sup * grad_k_second_sup * m_sup + ws_sup * k_sup * grad_m_sup +
             ws_sup * grad_k_first_sup * m_sup + ws_sup * k_sup * grad_m_sup +
@@ -384,6 +384,7 @@ class KSD(Metric):
             assert X is not None, "X must be provided for the CLT threshold."
             norm_q = sci_stats.norm.ppf(1 - alpha)
             var_hat = self.jackknife(X, score=score, hvp=hvp)
+            self.var_hat = var_hat
             term1 = 2 * var_hat**0.5 * norm_q / np.sqrt(n)
             # threshold = np.sqrt(term1 + theta**2)
             threshold = term1 + theta**2
@@ -421,136 +422,55 @@ class KSD(Metric):
         return var
 
 
-class PairwiseNorm(Metric):
-
-    def __init__(self, p: int = 2, pow = 1.):
-        self.p = p
-        self.pow = pow
+class KSdistance(Metric):
+    def __init__(self):
+        pass
 
     def __call__(self, X, Y):
+        if X.ndim > 1: 
+            assert X.shape[-1] == 1
+        if Y.ndim > 1:
+            assert Y.shape[-1] == 1
+
+        return sci_stats.ks_2samp(X.reshape((-1,)), Y.reshape((-1,)))[0]
+
+    def test_threshold(self, X: np.array = None, alpha: float = 0.05, method: str = "deviation",
+                       n_approx: int = 1000):
         """
-        @param X: numpy array of shape (n, d)
-        @param Y: numpy array of shape (m, d)
-
-        @return: numpy array of shape (n, m) with the pairwise l_p distances
+        Compute the threshold for the MMD test.
         """
-        # XX = np.sum(X ** 2, axis=1)[..., None, :]
-        # YY = np.sum(Y ** 2, axis=1)[..., None, :, :]
-        # XY = np.matmul(X, Y.T)
-        # return np.sqrt(XX + YY - 2 * XY)
-
-        Xp = X[..., None, :]
-        Yp = Y[..., None, :, :]
-        return np.linalg.norm(Xp - Yp, ord=self.p, axis=-1)**self.pow
-
-
-class EnergyDistance(Metric):
-
-    def __init__(self, base_metric: str = "l2", group: list = None):
-        """
-        
-        @param: group: list of indices of the coordinates in each group.
-        """
-        self.base_metric = base_metric
-        if base_metric == "l2":
-            self.metric = PairwiseNorm(p=2)
-
-    def __call__(self, X, Y):
-        """
-        NOT batched.
-        """
-        K_XY = self.metric(X, Y)
-        K_XX = self.metric(X, X)
-        K_YY = self.metric(Y, Y)
-
-        np.fill_diagonal(K_XX, 0.)
-        np.fill_diagonal(K_YY, 0.)
-        
-        n, m = X.shape[-2], Y.shape[-2]
-        term1 = np.sum(K_XY) / (n * m)
-        term2 = np.sum(K_XX) / (n * (n-1))
-        term3 = np.sum(K_YY) / (m * (m-1))
-        
-        res = 2 * term1 - term2 - term3
-        return res
-
-
-class GeneralisedEnergyDistance(Metric):
-
-    def __init__(self, base_metric: str = "sq", groups: list = None, dim: int = None):
-        """
-        If base_metric and groups are default, then the metric is the usual Euclidean energy distance.
-
-        @param: base_metric: the metric to use for the pairwise distances.
-        @param: groups: list of indices of the coordinates in each group. If None, 
-            a single group containing all coordinates is used.
-        @param: dim: the dimension of the data. If None, it is inferred from the groups.
-        """
-        self.base_metric = base_metric
-        if base_metric == "sq":
-            self.metric = PairwiseNorm(p=2, pow=2.)
-
-        elif base_metric == "l2":
-            self.metric = PairwiseNorm(p=2)
-
-        self.dim = dim
-        self._check_and_initialise_group(groups)
-
-    def _check_and_initialise_group(self, groups):
-        """
-        If groups is None, a single group containing all coordinates is used. In this case, dim
-        must be provided.
-
-        If groups is not None, it must be a list of lists of indices that form a partition of the coordinates.
-        """
-        if groups is None:
-            if self.dim is None:
-                raise ValueError("If group is not provided, dim must be provided.")
-
-            # groups = [[i] for i in range(self.dim)]
-            groups = [range(self.dim)]
-
-        groups_collapsed = [i for g in groups for i in g]
-        assert len(groups_collapsed) == len(set(groups_collapsed)), "The groups must be disjoint."
-
-        self.groups = groups
-
-        if self.dim is None:
-            self.dim = len(groups_collapsed)
+        n = X.shape[0]
+        if n <= 10:
+            # use exact distribution
+            sn_samples = sci_stats.kstwo.rvs(n=n, size=(n_approx * 2,))
         else:
-            assert self.dim == len(groups_collapsed), "The dimension must be the same as the length of the collapsed groups."
-    
-    def _K_d(self, X, Y):
-        """
-        Compute K_d in the generalised energy distance.
-        """
-        res = 0.
-        for g in self.groups:
-            rho = self.metric(X[..., g], Y[..., g])
-            res += rho
-        
-        res = np.sqrt(res)
-        return res
+            # use asymptotic distribution
+            sn_samples = sci_stats.kstwobign.rvs(size=(n_approx * 2,)) / np.sqrt(n)
 
-    def __call__(self, X, Y):
-        """
-        NOT batched.
-        """
-        assert self.dim == X.shape[-1] == Y.shape[-1], \
-            "The dimension of the data must be the same as the one provided."
+        if method == "deviation":
 
-        K_XY = self._K_d(X, Y)
-        K_XX = self._K_d(X, X)
-        K_YY = self._K_d(Y, Y)
+            sn_samples = sn_samples[:n_approx] + sn_samples[n_approx:]
+            threshold = np.percentile(sn_samples, 100 * (1 - alpha))
+            
+            return threshold, sn_samples
 
-        np.fill_diagonal(K_XX, 0.)
-        np.fill_diagonal(K_YY, 0.)
+    def reverse_test(self, X, Y, theta: float, alpha: float = 0.05, method = "deviation",
+                    return_all: bool = False, beta: float = None, theta_prime: float = None):
         
-        n, m = X.shape[-2], Y.shape[-2]
-        term1 = np.sum(K_XY) / (n * m)
-        term2 = np.sum(K_XX) / (n * (n-1))
-        term3 = np.sum(K_YY) / (m * (m-1))
-        
-        res = 2 * term1 - term2 - term3
-        return res
-    
+        if method == "deviation":
+            val = self(X, Y)
+            threshold, _ = self.test_threshold(X=X, alpha=alpha, method=method)
+            res = float(max(0, theta - val) > threshold)
+
+        elif method == "deviation_auto":
+            val = self(X, Y)
+            threshold, sn_samples = self.test_threshold(X=X, alpha=alpha, method="deviation")
+            gamma_beta = np.percentile(sn_samples, 100 * (1 - beta))
+            theta = theta_prime + threshold + gamma_beta
+            self.theta = theta
+            res = float(max(0, theta - val) > threshold)
+
+        if not return_all:
+            return res
+        else:
+            return res, val, threshold

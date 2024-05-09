@@ -130,7 +130,7 @@ def run_tests(samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=N
         "rbf": {"nonsq_stat": [], "stat": [], "pval": [], "rej": [], "boot_stats": []},
         "tilted": {"nonsq_stat": [], "stat": [], "pval": [], "rej": [], "boot_stats": []},
         "tilted_robust_dev": {"nonsq_stat": [], "stat": [], "threshold": [], "rej": [], "theta": [], "gamma": []},
-        "tilted_robust_clt": {"nonsq_stat": [], "stat": [], "threshold": [], "rej": [], "theta": [], "gamma": []},
+        "tilted_robust_clt": {"nonsq_stat": [], "stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "var_hat": []},
     }
     res["theta"] = theta
 
@@ -216,6 +216,7 @@ def run_tests(samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=N
         # TODO do not save threshold as it depends on theta and needs to be updated when theta is
         res["tilted_robust_clt"]["threshold"].append(threshold)
         res["tilted_robust_clt"]["theta"].append(ksd.theta)
+        res["tilted_robust_clt"]["theta"].append(ksd.var_hat)
         res["tilted_robust_clt"]["gamma"].append(np.sqrt(threshold - ksd.theta**2))
         sq_stat = ksd(X, X, vstat=True, score=score, hvp=hvp) # squared-KSD
         stat = sq_stat**0.5
