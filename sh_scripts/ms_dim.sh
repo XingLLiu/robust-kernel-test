@@ -1,6 +1,9 @@
-for d in 1 5 10 20 50 100
+for n in 100 200 300 400 500
 do
-    echo "Running d=$d"
-    # taskset -c 0-30 python3 experiments/ms.py --n=500 --d=$d --nrep=20
-    taskset -c 0-30 python3 experiments/ms_generate.py --n=500 --d=$d --nrep=20
+    for d in 1 5 10 20 50 100
+    do
+        echo "Running n=$n d=$d"
+        taskset -c 0-20 python3 experiments/ms.py --n=$n --d=$d --nrep=50 --gen=True
+        # taskset -c 0-20 python3 experiments/ms.py --n=$n --d=$d --nrep=50 --gen=False
+    done
 done

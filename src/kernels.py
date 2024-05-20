@@ -1,4 +1,5 @@
 # import numpy as np
+import jax
 import jax.numpy as np
 
 
@@ -154,11 +155,15 @@ class IMQ(object):
         gradgrad: grad_x grad_y k(x, y)
     """
 
-    def __init__(self, sigma_sq=None, beta=-0.5, med_heuristic=False):
+    def __init__(self, sigma_sq=None, beta=-0.5, med_heuristic=False, X=None, Y=None):
         super().__init__()
         self.sigma_sq = sigma_sq
         self.beta = beta
         self.med_heuristic = med_heuristic
+
+        if med_heuristic:
+            assert X is not None and Y is not None, "Need to provide X, Y for med heuristic"
+            self.bandwidth(X, Y)
 
     def UB(self):
         """Compute sup_x k(x, x)
@@ -183,7 +188,7 @@ class IMQ(object):
         dnorm2 = l2norm(X, Y)
         sigma2_inv = 1.0 / (self.sigma_sq + 1e-12)
         sigma2_inv = np.expand_dims(np.expand_dims(sigma2_inv, -1), -1)
-        K_XY = np.pow(1 + sigma2_inv * dnorm2, self.beta)
+        K_XY = jax.lax.pow(1 + sigma2_inv * dnorm2, self.beta)
 
         return K_XY
 
@@ -205,7 +210,7 @@ class IMQ(object):
         # diff_{ijk} = y^k_i - x^k_j
         diff = np.expand_dims(Y, -3) - np.expand_dims(X, -2) # n x m x dim
         # compute grad_K
-        grad_K_XY = 2 * sigma2_inv * diff * self.beta * np.pow(K, self.beta-1) # n x m x dim
+        grad_K_XY = 2 * sigma2_inv * diff * self.beta * jax.lax.pow(K, self.beta-1) # n x m x dim
 
         return grad_K_XY   
 
@@ -227,7 +232,7 @@ class IMQ(object):
         term2 = - self.beta * (self.beta-1) * 4 * sigma2_inv**2 * diff_norm_sq # n x m
         gradgrad_tr = (
             term1 + term2
-        ) * np.pow(K, self.beta-2) # n x m
+        ) * jax.lax.pow.pow(K, self.beta-2) # n x m
 
         return gradgrad_tr
 
@@ -344,13 +349,13 @@ class PolyWeightFunction(WeightFunction):
         assert np.squeeze(X[0]).shape == np.squeeze(self.loc).shape
 
         score_norm_sq = np.sum((X - self.loc)**2, -1) # n
-        return np.power(1 + score_norm_sq, -self.b) # n
+        return jax.lax.pow(1 + score_norm_sq, -self.b) # n
 
     def grad(self, X, score, hvp):
         score_norm_sq = np.sum((X - self.loc)**2, -1)
 
         res = -2 * self.b * np.expand_dims(
-            np.power(1 + score_norm_sq, -self.b - 1),
+            jax.lax.pow(1 + score_norm_sq, -self.b - 1),
             -1,
         ) * (X - self.loc) # n, d
         return res
@@ -360,30 +365,33 @@ class ScoreWeightFunction(WeightFunction):
     For an arbitrary score function, need the hessian of score.
     """
 
-    def __init__(self, hvp_denom_sup, b = 0.5):
+    def __init__(self, hvp_denom_sup, b = 0.5, a = 1., c = 1.):
         """
         @param hvp_denom_sup: sup_x \| Jsp_x sp_x \|_2 (1 + \| sp_x \|_2^2)^{-b - 1}
         """
+        self.a = a
         self.b = b
+        self.c = c
+        assert self.a > 0.
         assert self.b >= 0.5
 
-        self.weighted_score_sup = 1.
+        self.weighted_score_sup = jax.lax.pow(self.c, -2 * self.b)
         self.sup = 1.
-        self.derivative_sup = hvp_denom_sup * 2. * self.b
+        self.derivative_sup = hvp_denom_sup * 2. * self.b * self.c
 
     def __call__(self, X, score):
         assert X.shape == score.shape
 
         score_norm_sq = np.sum(score**2, -1) # n
-        return np.power(1 + score_norm_sq, -self.b) # n
+        return jax.lax.pow(self.a + self.c**2 * score_norm_sq, -self.b) # n
 
     def grad(self, X, score, hvp):
         assert X.shape == hvp.shape
         
         score_norm_sq = np.sum(score**2, -1) # n
 
-        res = -2 * self.b * np.expand_dims(
-            np.power(1 + score_norm_sq, -self.b - 1),
+        res = -2 * self.c**2 * self.b * np.expand_dims(
+            jax.lax.pow(self.a + self.c**2 * score_norm_sq, -self.b - 1),
             -1,
         ) * hvp # n, d
         return res

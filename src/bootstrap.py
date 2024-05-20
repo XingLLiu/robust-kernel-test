@@ -45,7 +45,7 @@ class WildBootstrap(Bootstrap):
         self.divergence = divergence
         self.ndraws = ndraws
 
-    def compute_bootstrap(self, X, Y, score: np.ndarray = None, hvp: np.array = None):
+    def compute_bootstrap(self, X, Y, score: np.ndarray = None, hvp: np.array = None, degen: bool = True):
         """
         Compute the threshold for the MMD test.
 
@@ -56,7 +56,10 @@ class WildBootstrap(Bootstrap):
         
         # draw Rademacher rvs
         n = X.shape[-2]
-        r = np.random.choice([-1, 1], size=(self.ndraws, n)) # b, n
+        if degen:
+            r = np.random.choice([-1, 1], size=(self.ndraws, n)) # b, n
+        else:
+            r = np.random.multinomial(n, pvals=[1/n]*n, size=self.ndraws) # b, n
 
         # compute test stat
         vstat = self.divergence.vstat(X, Y, score=score, hvp=hvp) # n, n
@@ -70,25 +73,10 @@ class WildBootstrap(Bootstrap):
         # boot_stats = np.sum(boot_stats_mat, axis=(-2, -1)) / (n**2) # b
         
         # vector approach
-        boot_stats = np.matmul(vstat, np.expand_dims(r, -1)) # b, n, 1
+        boot_stats = np.matmul(vstat, np.expand_dims(r, -1)) # b, n, n
         boot_stats = np.sum(np.squeeze(boot_stats, -1) * r, -1) / (n**2) # b
 
         return boot_stats, test_stat
-
-    # def pval(self, X, Y, return_boot: bool = False):
-    #     """
-    #     Compute the p-value for the MMD test.
-
-    #     @param X: numpy array of shape (n, d)
-    #     @param Y: numpy array of shape (m, d)
-    #     """
-    #     boot_stats, test_stat = self.compute_bootstrap(X, Y)
-    #     pval = (1. + np.sum(boot_stats > test_stat)) / (self.ndraws + 1)
-    #     if not return_boot:
-    #         return pval
-    #     else:
-    #         return pval, boot_stats
-
 
 class RobustMMDTest(object):
 

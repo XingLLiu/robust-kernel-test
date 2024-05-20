@@ -6,13 +6,14 @@ import numpy as np
 
 ## Imports for plotting
 import matplotlib.pyplot as plt
-import matplotlib
-matplotlib.rcParams['lines.linewidth'] = 2.0
-import seaborn as sns
-sns.reset_orig()
+# import matplotlib
+# matplotlib.rcParams['lines.linewidth'] = 2.0
+# import seaborn as sns
+# sns.reset_orig()
 
 import pickle
 import argparse
+from pathlib import Path
 
 ## Progress bar
 from tqdm import tqdm, trange
@@ -597,6 +598,17 @@ def sample_and_inject_noise(n, std_ls, xpos=[0, 5], ypos=[0, 5]):
     
     return res
 
+def sample_MNIST(n):
+    index = torch.randint(high=len(train_set), size=(n,))
+    samples = torch.concat([
+        train_set[ii][0][None, :]
+        .to(device)
+        .to(torch.float64)
+        .clone()
+    for ii in index], axis=0)
+
+    return samples
+
 def compute_score_and_hvp(sample, seed):
     # 1. compute score
     if not isinstance(sample, torch.Tensor):
@@ -630,53 +642,101 @@ def compute_score_and_hvp(sample, seed):
     return grad_log_px.cpu().detach().numpy(), hes_vec.cpu().detach().numpy().reshape((28 ** 2,))
 
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--n", type=int)
-parser.add_argument("--nrep", type=int)
-parser.add_argument("--seed", type=int)
-parser.add_argument("--param_boot", type=bool, default=False)
-args = parser.parse_args()
-
-
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--n", type=int)
+    parser.add_argument("--nrep", type=int)
+    parser.add_argument("--seed", type=int)
+    parser.add_argument("--data", type=str, default="model")
+    args = parser.parse_args()
+
+    DATASET_PATH = os.path.join(DATASET_PATH, "nf/", args.data)
+
     flow_model, _ = train_flow(create_multiscale_flow(), model_name="MNISTFlow_multiscale")
 
     pl.seed_everything(args.seed)
     nrep = args.nrep
     n = args.n
 
-    if args.param_boot:
-        filename = "param/"
-        std_ls = [0.]
-        seed_base = args.seed * 9 + 1000
-    else:
-        filename = ""
+    if args.data == "mnist":
+        DATASET_PATH = os.path.join(DATASET_PATH, "mnist/")
+        seed_base = args.seed * 9 # + 1000    
+    
+        samples_res = np.empty([nrep, n, 28 ** 2])
+        scores_res = np.empty([nrep, n, 28 ** 2])
+        hvp_res = np.empty([nrep, n, 28 ** 2])
+
+        for j in range(nrep):
+            samples = sample_MNIST(n)
+
+            samples_res[j] = samples.cpu().detach().numpy().reshape([-1, 28 ** 2])
+
+            iterator = trange(n)
+            for i in iterator:
+                iterator.set_description(f"Rep [{j+1} / {nrep}]")
+
+                seed = i + j * n * 100 + seed_base
+                
+                sample = samples[i]
+
+                score, hvp = compute_score_and_hvp(sample, seed)
+                scores_res[j, i] = score
+                hvp_res[j, i] = hvp
+    
+    elif args.data == "model":
         std_ls = [0., 1., 5., 10., 20., 50., 100.]
         seed_base = args.seed * 9
 
-    samples_res = {ss: np.empty([nrep, n, 28 ** 2]) for ss in std_ls}
-    scores_res = {ss: np.empty([nrep, n, 28 ** 2]) for ss in std_ls}
-    hvp_res = {ss: np.empty([nrep, n, 28 ** 2]) for ss in std_ls}
+        samples_res = {ss: np.empty([nrep, n, 28 ** 2]) for ss in std_ls}
+        scores_res = {ss: np.empty([nrep, n, 28 ** 2]) for ss in std_ls}
+        hvp_res = {ss: np.empty([nrep, n, 28 ** 2]) for ss in std_ls}
 
-    for j in range(nrep):
-        pert_samples = sample_and_inject_noise(n, std_ls)
-        for std in std_ls:
-            samples_res[std][j] = pert_samples[std].cpu().detach().numpy().reshape([-1, 28 ** 2])
-
-        iterator = trange(n)
-        for i in iterator:
-            iterator.set_description(f"Rep [{j+1} / {nrep}]")
-
-            seed = i + j * n * 100 + seed_base
-
+        for j in range(nrep):
+            pert_samples = sample_and_inject_noise(n, std_ls)
             for std in std_ls:
-                sample = pert_samples[std][i]
+                samples_res[std][j] = pert_samples[std].cpu().detach().numpy().reshape([-1, 28 ** 2])
 
-                score, hvp = compute_score_and_hvp(sample, seed)
-                scores_res[std][j, i] = score
-                hvp_res[std][j, i] = hvp
+            iterator = trange(n)
+            for i in iterator:
+                iterator.set_description(f"Rep [{j+1} / {nrep}]")
+
+                seed = i + j * n * 100 + seed_base
+
+                for std in std_ls:
+                    sample = pert_samples[std][i]
+
+                    score, hvp = compute_score_and_hvp(sample, seed)
+                    scores_res[std][j, i] = score
+                    hvp_res[std][j, i] = hvp
+
+    elif args.data == "model_full":
+        std_ls = [0., 1., 5., 10., 20., 50., 100.]
+        seed_base = args.seed * 9
+
+        samples_res = {ss: np.empty([nrep, n, 28 ** 2]) for ss in std_ls}
+        scores_res = {ss: np.empty([nrep, n, 28 ** 2]) for ss in std_ls}
+        hvp_res = {ss: np.empty([nrep, n, 28 ** 2]) for ss in std_ls}
+
+        for j in range(nrep):
+            pert_samples = sample_and_inject_noise(n, std_ls, xpos=[0, 28], ypos=[0, 28])
+            for std in std_ls:
+                samples_res[std][j] = pert_samples[std].cpu().detach().numpy().reshape([-1, 28 ** 2])
+
+            iterator = trange(n)
+            for i in iterator:
+                iterator.set_description(f"Rep [{j+1} / {nrep}]")
+
+                seed = i + j * n * 100 + seed_base
+
+                for std in std_ls:
+                    sample = pert_samples[std][i]
+
+                    score, hvp = compute_score_and_hvp(sample, seed)
+                    scores_res[std][j, i] = score
+                    hvp_res[std][j, i] = hvp
 
     # save
-    pickle.dump(samples_res, open(os.path.join(DATASET_PATH, f"nf/{filename}samples_res_n{n}_seed{args.seed}.pkl"), "wb"))
-    pickle.dump(scores_res, open(os.path.join(DATASET_PATH, f"nf/{filename}scores_res_n{n}_seed{args.seed}.pkl"), "wb"))
-    pickle.dump(hvp_res, open(os.path.join(DATASET_PATH, f"nf/{filename}hvp_res_n{n}_seed{args.seed}.pkl"), "wb"))
+    Path(DATASET_PATH).mkdir(exist_ok=True, parents=True)
+    pickle.dump(samples_res, open(os.path.join(DATASET_PATH, f"samples_res_n{n}_seed{args.seed}.pkl"), "wb"))
+    pickle.dump(scores_res, open(os.path.join(DATASET_PATH, f"scores_res_n{n}_seed{args.seed}.pkl"), "wb"))
+    pickle.dump(hvp_res, open(os.path.join(DATASET_PATH, f"hvp_res_n{n}_seed{args.seed}.pkl"), "wb"))

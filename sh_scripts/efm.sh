@@ -1,0 +1,1 @@
+taskset -c 0-20 python3 experiments/efm.py --n=200 --nrep=20 --seed=0 --gen=False

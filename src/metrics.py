@@ -312,6 +312,9 @@ class KSD(Metric):
 
         u_p = term1_mat + term2_mat + term3_mat + term4_mat
 
+        # for ii, mat in enumerate([term1_mat, term2_mat, term3_mat, term4_mat]):
+        #     print(f"term {ii+1}:", np.mean(mat))
+
         if not vstat:
             # extract diagonal
             # np.fill_diagonal(u_p, 0.) #TODO make this batchable
@@ -329,7 +332,7 @@ class KSD(Metric):
 
     def test_threshold(
             self, n: int, eps0: float = None, theta: float = None, alpha: float = 0.05, method: str = "deviation",
-            X: np.array = None, score=None, hvp=None,
+            X: np.array = None, score=None, hvp=None, nboot: int = 500,
         ):
         """
         Compute the threshold for the robust test. Threshold = \gamma + \theta.
@@ -366,7 +369,7 @@ class KSD(Metric):
             # threshold = tau / n + np.sqrt(- 2 * tau**2 * np.log(alpha) / n)
             
             # 2. threshold for (non-squared) P-KSD
-            threshold = np.sqrt(max(tau, tau_star) / n) + np.sqrt(- 2 * tau * (np.log(alpha)) / n)
+            threshold = np.sqrt(tau / n) + np.sqrt(- 2 * tau * (np.log(alpha)) / n)
 
         elif method == "ol_robust":
             m0 = int(np.floor(eps0 * n))
@@ -377,7 +380,7 @@ class KSD(Metric):
             threshold = np.sqrt(gamma_m0**2 + term1 + term2)
 
         elif method == "ball_robust":
-            gamma_n = np.sqrt(max(tau, tau_star) / n) + np.sqrt(- 2 * tau * (np.log(alpha)) / n)
+            gamma_n = np.sqrt(tau / n) + np.sqrt(- 2 * tau * (np.log(alpha)) / n)
             threshold = theta + gamma_n
 
         elif method == "CLT":
@@ -388,6 +391,13 @@ class KSD(Metric):
             term1 = 2 * var_hat**0.5 * norm_q / np.sqrt(n)
             # threshold = np.sqrt(term1 + theta**2)
             threshold = term1 + theta**2
+
+        elif method == "boot":
+            bootstrap = boot.WildBootstrap(self, ndraws=nboot)
+            boot_stats_nondegen, vstat = bootstrap.compute_bootstrap(X, X, score=score, hvp=hvp, degen=False)
+            # boot_stats_degen, _ = bootstrap.compute_bootstrap(X, X, score=score, hvp=hvp, degen=True)
+            threshold_nondegen = np.percentile(boot_stats_nondegen - vstat, 100 * (1 - alpha))
+            threshold = threshold_nondegen + theta**2
 
         return threshold
 

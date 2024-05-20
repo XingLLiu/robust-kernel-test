@@ -116,16 +116,20 @@ def change_theta(res, methods, theta):
         if mm == "tilted_robust_dev":
             res[mm]["rej"] = [int(stat**0.5 > gam + theta) for stat, gam in zip(res[mm]["stat"], res[mm]["gamma"])]
         elif mm == "tilted_robust_clt":
-            res[mm]["rej"] = [int(stat**0.5 > np.sqrt(gam**2 + theta**2)) for stat, gam in zip(res[mm]["stat"], res[mm]["gamma"])]
+            res[mm]["rej"] = [int(stat > gam**2 + theta**2) for stat, gam in zip(res[mm]["stat"], res[mm]["gamma"])]
+        elif mm == "tilted_robust_boot":
+            res[mm]["rej"] = [int(stat > gam**2 + theta**2) for stat, gam in zip(res[mm]["stat"], res[mm]["gamma"])]
     
     return res
 
-def run_tests(samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=None, alpha=0.05, verbose=False):
+def run_tests(samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=None, alpha=0.05, verbose=False,
+              weight_fn_args=None):
     res = {
         "rbf": {"nonsq_stat": [], "stat": [], "u_stat": [], "pval": [], "rej": [], "boot_stats": []},
         "tilted": {"nonsq_stat": [], "stat": [], "u_stat": [], "pval": [], "rej": [], "boot_stats": []},
-        "tilted_robust_dev": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": []},
+        "tilted_robust_dev": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "tau": []},
         "tilted_robust_clt": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "var_hat": []},
+        "tilted_robust_boot": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": []},
     }
     res["theta"] = theta
 
@@ -155,7 +159,10 @@ def run_tests(samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=N
         res["rbf"]["boot_stats"].append(boot_stats)
 
         # 2. tilted
-        score_weight_fn = kernels.ScoreWeightFunction(hvp_denom_sup=hvp_denom_sup)
+        if weight_fn_args is None:
+            weight_fn_args = {}
+        weight_fn_args["hvp_denom_sup"] = hvp_denom_sup
+        score_weight_fn = kernels.ScoreWeightFunction(**weight_fn_args)
         kernel0 = kernels.RBF(**kernel_args)
         kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
 
@@ -189,8 +196,9 @@ def run_tests(samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=N
         res["tilted_robust_dev"]["theta"].append(ksd.theta)
         res["tilted_robust_dev"]["gamma"].append(threshold - ksd.theta)
         res["tilted_robust_dev"]["rej"].append(int(nonsq_stat > threshold))
+        res["tilted_robust_dev"]["tau"].append(ksd.tau)
 
-        # # tilted ball robust CLT
+        # 5. tilted ball robust CLT
         threshold = ksd.test_threshold(
             n=n, eps0=eps0, theta=theta, alpha=alpha, method="CLT", X=X, score=score, hvp=hvp
         )
@@ -203,5 +211,18 @@ def run_tests(samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=N
         res["tilted_robust_clt"]["var_hat"].append(ksd.var_hat)
         res["tilted_robust_clt"]["gamma"].append(np.sqrt(threshold - ksd.theta**2))
         res["tilted_robust_clt"]["rej"].append(int(stat > threshold))
+
+        # 6. bootstrap
+        threshold = ksd.test_threshold(
+            n=n, eps0=eps0, theta=theta, alpha=alpha, method="boot", X=X, score=score, hvp=hvp
+        )
+        # TODO do not save threshold as it depends on theta and needs to be updated when theta is
+        res["tilted_robust_boot"]["stat"].append(stat)
+        res["tilted_robust_boot"]["nonsq_stat"].append(nonsq_stat)
+        res["tilted_robust_boot"]["u_stat"].append(ustat)
+        res["tilted_robust_boot"]["threshold"].append(threshold)
+        res["tilted_robust_boot"]["theta"].append(ksd.theta)
+        res["tilted_robust_boot"]["gamma"].append(np.sqrt(threshold - ksd.theta**2))
+        res["tilted_robust_boot"]["rej"].append(int(stat > threshold))
     
     return res
