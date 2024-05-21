@@ -118,6 +118,10 @@ def change_theta(res, methods, theta):
         elif mm == "tilted_robust_clt":
             res[mm]["rej"] = [int(stat > gam**2 + theta**2) for stat, gam in zip(res[mm]["stat"], res[mm]["gamma"])]
         elif mm == "tilted_robust_boot":
+            # print("boot", res[mm]["stat"], res[mm]["gamma"])
+            res[mm]["rej"] = [int(stat > gam**2 + theta**2) for stat, gam in zip(res[mm]["stat"], res[mm]["gamma"])]
+        elif mm == "tilted_robust_boot2":
+            # print("boot2", res[mm]["stat"], res[mm]["gamma"])
             res[mm]["rej"] = [int(stat > gam**2 + theta**2) for stat, gam in zip(res[mm]["stat"], res[mm]["gamma"])]
     
     return res
@@ -130,6 +134,7 @@ def run_tests(samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=N
         "tilted_robust_dev": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "tau": []},
         "tilted_robust_clt": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "var_hat": []},
         "tilted_robust_boot": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": []},
+        "tilted_robust_boot2": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "close": []},
     }
     res["theta"] = theta
 
@@ -213,10 +218,13 @@ def run_tests(samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=N
         res["tilted_robust_clt"]["rej"].append(int(stat > threshold))
 
         # 6. bootstrap
-        threshold = ksd.test_threshold(
-            n=n, eps0=eps0, theta=theta, alpha=alpha, method="boot", X=X, score=score, hvp=hvp
+        # threshold = ksd.test_threshold(
+        #     n=n, eps0=eps0, theta=theta, alpha=alpha, method="boot", X=X, score=score, hvp=hvp
+        # )
+        threshold, threshold_max = ksd.test_threshold(
+            n=n, eps0=eps0, theta=theta, alpha=alpha, method="boot2", X=X, score=score, hvp=hvp
         )
-        # TODO do not save threshold as it depends on theta and needs to be updated when theta is
+        # # TODO do not save threshold as it depends on theta and needs to be updated when theta is
         res["tilted_robust_boot"]["stat"].append(stat)
         res["tilted_robust_boot"]["nonsq_stat"].append(nonsq_stat)
         res["tilted_robust_boot"]["u_stat"].append(ustat)
@@ -224,5 +232,16 @@ def run_tests(samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=N
         res["tilted_robust_boot"]["theta"].append(ksd.theta)
         res["tilted_robust_boot"]["gamma"].append(np.sqrt(threshold - ksd.theta**2))
         res["tilted_robust_boot"]["rej"].append(int(stat > threshold))
+
+        # 6. bootstrap
+        # TODO do not save threshold as it depends on theta and needs to be updated when theta is
+        res["tilted_robust_boot2"]["stat"].append(stat)
+        res["tilted_robust_boot2"]["nonsq_stat"].append(nonsq_stat)
+        res["tilted_robust_boot2"]["u_stat"].append(ustat)
+        res["tilted_robust_boot2"]["threshold"].append(threshold_max)
+        res["tilted_robust_boot2"]["theta"].append(ksd.theta)
+        res["tilted_robust_boot2"]["gamma"].append(np.sqrt(threshold_max - ksd.theta**2))
+        res["tilted_robust_boot2"]["rej"].append(int(stat > threshold_max))
+        res["tilted_robust_boot2"]["close"].append(ksd.checkequal)
     
     return res

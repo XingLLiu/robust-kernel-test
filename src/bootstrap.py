@@ -57,7 +57,8 @@ class WildBootstrap(Bootstrap):
         # draw Rademacher rvs
         n = X.shape[-2]
         if degen:
-            r = np.random.choice([-1, 1], size=(self.ndraws, n)) # b, n
+            # r = np.random.choice([-1, 1], size=(self.ndraws, n)) # b, n
+            r = np.random.multinomial(n, pvals=[1/n]*n, size=self.ndraws) - 1 # b, n
         else:
             r = np.random.multinomial(n, pvals=[1/n]*n, size=self.ndraws) # b, n
 

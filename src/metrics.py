@@ -392,12 +392,24 @@ class KSD(Metric):
             # threshold = np.sqrt(term1 + theta**2)
             threshold = term1 + theta**2
 
-        elif method == "boot":
+        # elif method == "boot":
+        #     bootstrap = boot.WildBootstrap(self, ndraws=nboot)
+        #     boot_stats_nondegen, vstat = bootstrap.compute_bootstrap(X, X, score=score, hvp=hvp, degen=False)
+        #     threshold_nondegen = np.percentile(boot_stats_nondegen - vstat, 100 * (1 - alpha))
+        #     threshold = threshold_nondegen + theta**2
+
+        elif method == "boot" or method == "boot2":
             bootstrap = boot.WildBootstrap(self, ndraws=nboot)
             boot_stats_nondegen, vstat = bootstrap.compute_bootstrap(X, X, score=score, hvp=hvp, degen=False)
-            # boot_stats_degen, _ = bootstrap.compute_bootstrap(X, X, score=score, hvp=hvp, degen=True)
+            boot_stats_degen, _ = bootstrap.compute_bootstrap(X, X, score=score, hvp=hvp, degen=True)
             threshold_nondegen = np.percentile(boot_stats_nondegen - vstat, 100 * (1 - alpha))
-            threshold = threshold_nondegen + theta**2
+            threshold_degen = np.percentile(boot_stats_degen, 100 * (1 - alpha))
+            if method == "boot":
+                threshold = threshold_nondegen + theta**2
+            elif method == "boot2":
+                threshold_max = np.max([threshold_nondegen, threshold_degen])
+                self.checkequal = np.allclose(threshold_nondegen, threshold_max)
+                threshold = threshold_nondegen + theta**2, threshold_max + theta**2
 
         return threshold
 
