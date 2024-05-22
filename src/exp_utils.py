@@ -118,57 +118,70 @@ def change_theta(res, methods, theta):
         elif mm == "tilted_robust_clt":
             res[mm]["rej"] = [int(stat > gam**2 + theta**2) for stat, gam in zip(res[mm]["stat"], res[mm]["gamma"])]
         elif mm == "tilted_robust_boot":
-            # print("boot", res[mm]["stat"], res[mm]["gamma"])
             res[mm]["rej"] = [int(stat > gam**2 + theta**2) for stat, gam in zip(res[mm]["stat"], res[mm]["gamma"])]
-        elif mm == "tilted_robust_boot2":
-            # print("boot2", res[mm]["stat"], res[mm]["gamma"])
-            res[mm]["rej"] = [int(stat > gam**2 + theta**2) for stat, gam in zip(res[mm]["stat"], res[mm]["gamma"])]
+        # elif mm == "tilted_robust_boot2":
+        #     res[mm]["rej"] = [int(stat > gam**2 + theta**2) for stat, gam in zip(res[mm]["stat"], res[mm]["gamma"])]
     
     return res
 
 def run_tests(samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=None, alpha=0.05, verbose=False,
-              weight_fn_args=None):
+              weight_fn_args=None, base_kernel="IMQ"):
     res = {
-        "rbf": {"nonsq_stat": [], "stat": [], "u_stat": [], "pval": [], "rej": [], "boot_stats": []},
+        "standard": {"nonsq_stat": [], "stat": [], "u_stat": [], "pval": [], "rej": [], "boot_stats": []},
         "tilted": {"nonsq_stat": [], "stat": [], "u_stat": [], "pval": [], "rej": [], "boot_stats": []},
-        "tilted_robust_dev": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "tau": []},
+        "tilted_robust_dev": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "tau": [], "ksd_class": []},
         "tilted_robust_clt": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "var_hat": []},
         "tilted_robust_boot": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": []},
-        "tilted_robust_boot2": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "close": []},
+        # "tilted_robust_boot2": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "close": []},
     }
     res["theta"] = theta
 
     assert len(samples.shape) == 3, "Must be (batch, n, dim)"
+
+    # weighting function
+    if weight_fn_args is None:
+        weight_fn_args = {}
+    if hvps is not None:
+        weight_fn_class = kernels.ScoreWeightFunction
+        weight_fn_args["hvp_denom_sup"] = hvp_denom_sup
+    else:
+        weight_fn_class = kernels.PolyWeightFunction
+
+    # base kernel
+    if base_kernel == "IMQ":
+        base_kernel_class = kernels.IMQ
+    elif base_kernel == "RBF":
+        base_kernel_class = kernels.RBF
 
     iterator = range(len(samples)) if not verbose else trange(len(samples))
     for i in iterator:
 
         X = samples[i]
         score = scores[i]
-        if hvps is not None:
-            hvp = hvps[i]
+        hvp = hvps[i] if hvps is not None else None
+        # if hvps is not None:
+        #     hvp = hvps[i]
+        # else:
+        #     hvp = None
         
         n = X.shape[-2]
         kernel_args = {"sigma_sq": None, "med_heuristic": True, "X": X, "Y": X} if bw == "med" else {"sigma_sq": bw}
 
         # 1. RBF
-        kernel = kernels.RBF(**kernel_args)
+        kernel = base_kernel_class(**kernel_args)
 
         ksd = metrics.KSD(kernel)
         wild_boot = boot.WildBootstrap(ksd)
         pval, stat, boot_stats = wild_boot.pval(X, X, return_stat=True, return_boot=True, score=score)
-        res["rbf"]["stat"].append(stat)
-        res["rbf"]["nonsq_stat"].append(stat**0.5)
-        res["rbf"]["pval"].append(pval)
-        res["rbf"]["rej"].append(int(pval < alpha))
-        res["rbf"]["boot_stats"].append(boot_stats)
+        res["standard"]["stat"].append(stat)
+        res["standard"]["nonsq_stat"].append(stat**0.5)
+        res["standard"]["pval"].append(pval)
+        res["standard"]["rej"].append(int(pval < alpha))
+        res["standard"]["boot_stats"].append(boot_stats)
 
         # 2. tilted
-        if weight_fn_args is None:
-            weight_fn_args = {}
-        weight_fn_args["hvp_denom_sup"] = hvp_denom_sup
-        score_weight_fn = kernels.ScoreWeightFunction(**weight_fn_args)
-        kernel0 = kernels.RBF(**kernel_args)
+        score_weight_fn = weight_fn_class(**weight_fn_args)
+        kernel0 = base_kernel_class(**kernel_args)
         kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
 
         ksd = metrics.KSD(kernel)
@@ -202,6 +215,7 @@ def run_tests(samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=N
         res["tilted_robust_dev"]["gamma"].append(threshold - ksd.theta)
         res["tilted_robust_dev"]["rej"].append(int(nonsq_stat > threshold))
         res["tilted_robust_dev"]["tau"].append(ksd.tau)
+        res["tilted_robust_dev"]["ksd_class"].append(ksd)
 
         # 5. tilted ball robust CLT
         threshold = ksd.test_threshold(

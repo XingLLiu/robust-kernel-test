@@ -14,7 +14,60 @@ from pathlib import Path
 import argparse
 
 
-class EFM(object):
+class ExpFamilyModel(object):
+    def __init__(self, params: jnp.ndarray):
+        self.params = params
+
+    def log_unnormalised_density(self, x):
+        raise NotImplementedError
+    
+    def t(self, x):
+        raise NotImplementedError
+    
+    def b(self, x):
+        raise NotImplementedError
+    
+    def _compute_grads(self, x):
+        raise NotImplementedError
+
+    def sm_est(self, x):
+        JT, grad_b, lap_T = self._compute_grads(x)
+
+        # compute minimum SM estimator
+        JTJT = jnp.matmul(JT, jnp.transpose(JT, (0, 2, 1))) # n, r, r
+        JT_gradb = jnp.matmul(JT, jnp.expand_dims(grad_b, -1)) # n, r, 1
+        JT_gradb = jnp.squeeze(JT_gradb, -1) # n, r
+        res = - jnp.linalg.solve(
+            jnp.mean(JTJT, 0),
+            jnp.mean(JT_gradb + lap_T, 0),
+        )
+        return res
+    
+    def ksd_est(self, x, kernel):
+        JT, grad_b, _ = self._compute_grads(x)
+        
+        # compute minimum DKSD estimator
+        K = kernel(x, x) # n, n
+        grad1_K = kernel.grad_first(x, x) # n, n, d
+        grad2_K = kernel.grad_second(x, x) # n, n, d
+        
+        JT_K = JT[:, jnp.newaxis] * K[..., jnp.newaxis, jnp.newaxis] # n, n, r, d
+        JT_K_JT = jnp.matmul(JT_K, jnp.transpose(JT[jnp.newaxis, :], (0, 1, 3, 2))) # n, n, r, r
+        
+        JT_K_gradb = JT_K * grad_b[jnp.newaxis, :, jnp.newaxis, :] # n, n, r, d
+        JT_K_gradb = jnp.sum(JT_K_gradb, -1) # n, n, r
+
+        JT_grad2_K = jnp.sum(JT[:, jnp.newaxis] * grad2_K[:, :, jnp.newaxis], -1) # n, n, r
+
+        grad1_K_JT = jnp.sum(JT[jnp.newaxis, ...] * grad1_K[:, :, jnp.newaxis], -1) # n, n, r
+
+        term1 = jnp.mean(JT_K_JT, [0, 1]) # r, r
+        # add jitter for numerical stability as per Key at al., 2023
+        term1 = term1 + jnp.eye(term1.shape[0]) * 1e-4
+        term2 = jnp.mean(2 * JT_K_gradb + JT_grad2_K + grad1_K_JT, [0, 1]) # r, r
+        return jnp.linalg.solve(term1, -0.5 * term2)
+
+class EFM(ExpFamilyModel):
     def __init__(self, params: jnp.array):
         self.params = jnp.array(params) # r
 
@@ -28,6 +81,10 @@ class EFM(object):
     #      ) # n
     #     unnorm_lp = t[0] * self.params[0] + t[1] * self.params[1] + b # n
     #     return unnorm_lp
+
+    def t(self, x):
+        # return jnp.tanh(x)[:, -2:]
+        return jnp.tanh(x)[-2:]
 
     def log_unnormalised_density(self, x):
         t = jnp.tanh(x)[-2:] # n, r
@@ -100,41 +157,6 @@ class EFM(object):
 
         return JT, grad_b, lap_T
 
-    def sm_est(self, x):
-        JT, grad_b, lap_T = self._compute_grads(x)
-
-        # compute minimum SM estimator
-        JTJT = jnp.matmul(JT, jnp.transpose(JT, (0, 2, 1))) # n, r, r
-        JT_gradb = jnp.matmul(JT, jnp.expand_dims(grad_b, -1)) # n, r, 1
-        JT_gradb = jnp.squeeze(JT_gradb, -1) # n, r
-        res = - jnp.linalg.solve(
-            jnp.mean(JTJT, 0),
-            jnp.mean(JT_gradb + lap_T, 0),
-        )
-        return res
-    
-    def ksd_est(self, x, kernel):
-        JT, grad_b, _ = self._compute_grads(x)
-        
-        # compute minimum DKSD estimator
-        K = kernel(x, x) # n, n
-        grad1_K = kernel.grad_first(x, x) # n, n, d
-        grad2_K = kernel.grad_second(x, x) # n, n, d
-        
-        JT_K = JT[:, jnp.newaxis] * K[..., jnp.newaxis, jnp.newaxis] # n, n, r, d
-        JT_K_JT = jnp.matmul(JT_K, jnp.transpose(JT[jnp.newaxis, :], (0, 1, 3, 2))) # n, n, r, r
-        
-        JT_K_gradb = JT_K * grad_b[jnp.newaxis, :, jnp.newaxis, :] # n, n, r, d
-        JT_K_gradb = jnp.sum(JT_K_gradb, -1) # n, n, r
-
-        JT_grad2_K = jnp.sum(JT[:, jnp.newaxis] * grad2_K[:, :, jnp.newaxis], -1) # n, n, r
-
-        grad1_K_JT = jnp.sum(JT[jnp.newaxis, ...] * grad1_K[:, :, jnp.newaxis], -1) # n, n, r
-
-        term1 = jnp.mean(JT_K_JT, [0, 1]) # r, r
-        term2 = jnp.mean(2 * JT_K_gradb + JT_grad2_K + grad1_K_JT, [0, 1]) # r, r
-        return - jnp.linalg.solve(term1, term2)
-
     def compute_grad_and_hvp(self, x):
         x = jnp.array(x)
         JT, grad_b, _ = self._compute_grads(x)
@@ -177,6 +199,17 @@ def inference_loop_multiple_chains(
     _, (states, infos) = jax.lax.scan(one_step, initial_states, keys)
 
     return (states, infos)
+
+def sample_outlier_contam(X: jnp.ndarray, eps: float, ol_mean: float, ol_std: float):
+    n, d = X.shape[0], X.shape[1]
+    ncontam = int(n * eps)
+    outliers = np.reshape(
+        np.random.normal(size=(ncontam,), loc=ol_mean, scale=ol_std),
+        (-1, d),
+    )
+    idx = np.random.choice(range(n), size=ncontam, replace=False) # ncontam
+    X = X.at[idx].set(outliers)
+    return X
 
 
 SAVE_DIR = "data/efm"

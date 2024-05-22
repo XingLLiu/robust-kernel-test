@@ -165,6 +165,14 @@ class IMQ(object):
             assert X is not None and Y is not None, "Need to provide X, Y for med heuristic"
             self.bandwidth(X, Y)
 
+        inv_bw = 1 / np.sqrt(self.sigma_sq / 2.)
+        self.sup = 1.
+        assert self.beta == -0.5
+        uu = (self.sigma_sq / 3)**0.5
+        self.grad_first_sup = 1 / self.sigma_sq * uu * (1 + 1 / self.sigma_sq * uu**2)**(-3/2)
+        self.grad_second_sup = self.grad_first_sup
+        self.gradgrad_sup = 1 / (self.sigma_sq / 2. ) #TODO this is wrong, but we're not using it anyway
+
     def UB(self):
         """Compute sup_x k(x, x)
         """
@@ -232,10 +240,17 @@ class IMQ(object):
         term2 = - self.beta * (self.beta-1) * 4 * sigma2_inv**2 * diff_norm_sq # n x m
         gradgrad_tr = (
             term1 + term2
-        ) * jax.lax.pow.pow(K, self.beta-2) # n x m
+        ) * jax.lax.pow(K, self.beta-2) # n x m
 
         return gradgrad_tr
 
+    def eval_zero(self):
+        """Evaluate k and gradgrad k at (x, x)
+        """
+        x = np.zeros((1, 1))
+        k_zero = np.squeeze(self(x, x))
+        gradgrad_zero = np.squeeze(self.gradgrad(x, x))
+        return np.abs(k_zero), np.abs(gradgrad_zero)
 
 class TiltedKernel(object):
 
@@ -336,28 +351,31 @@ class PolyWeightFunction(WeightFunction):
     For an arbitrary score function, need the hessian of score.
     """
 
-    def __init__(self, b = 0.5, loc = 0.):
+    def __init__(self, b = 0.5, loc = 0., a = 1.):
+        """m(x) = (1 + \| x - loc \|_2^2 / a^2)^(-b)
+        """
         self.loc = np.array(loc)
         self.b = b
         assert self.b >= 0.5
+        self.a = a
 
-        self.weighted_score_sup = 1. #TODO assuming Gaussian score
+        self.weighted_score_sup = 1 / self.a #TODO assuming Gaussian score
         self.sup = 1.
-        self.derivative_sup = 2. * self.b
+        self.derivative_sup = 2. * self.b * self.a
 
     def __call__(self, X, score):
         assert np.squeeze(X[0]).shape == np.squeeze(self.loc).shape
 
         score_norm_sq = np.sum((X - self.loc)**2, -1) # n
-        return jax.lax.pow(1 + score_norm_sq, -self.b) # n
+        return jax.lax.pow(1 + score_norm_sq / self.a**2, -self.b) # n
 
     def grad(self, X, score, hvp):
         score_norm_sq = np.sum((X - self.loc)**2, -1)
 
         res = -2 * self.b * np.expand_dims(
-            jax.lax.pow(1 + score_norm_sq, -self.b - 1),
+            jax.lax.pow(1 + score_norm_sq / self.a**2, -self.b - 1),
             -1,
-        ) * (X - self.loc) # n, d
+        ) * (X - self.loc) * self.a**(-2) # n, d
         return res
     
 class ScoreWeightFunction(WeightFunction):
@@ -394,4 +412,42 @@ class ScoreWeightFunction(WeightFunction):
             jax.lax.pow(self.a + self.c**2 * score_norm_sq, -self.b - 1),
             -1,
         ) * hvp # n, d
+        return res
+
+    
+class SumKernel(object):
+    def __init__(self, kernels):
+        self.kernels = kernels
+
+    def __call__(self, X, Y):
+        res = 0.
+        for kernel in self.kernels:
+            res += kernel(X, Y)
+
+        return res
+
+    def grad_first(self, X, Y):
+        """Compute grad_K in wrt first argument in matrix form 
+        """
+        return -self.grad_second(X, Y)
+
+    def grad_second(self, X, Y):
+        """Compute grad_K in wrt second argument in matrix form.
+        Args:
+            Xr: tf.Tensor of shape (..., n, dim)
+            Yr: tf.Tensor of shape (..., m, dim)
+        Output:
+            tf.Tensor of shape (..., n, m, dim)
+        """
+        res = 0.
+        for kernel in self.kernels:
+            res += kernel.grad_second(X, Y)
+
+        return res
+
+    def gradgrad(self, X, Y):
+        res = 0.
+        for kernel in self.kernels:
+            res += kernel.gradgrad(X, Y)
+
         return res
