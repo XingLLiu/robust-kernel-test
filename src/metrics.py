@@ -1,4 +1,5 @@
-import numpy as np
+# import numpy as np
+import jax.numpy as np
 import scipy.stats as sci_stats
 import src.bootstrap as boot
 import src.kernels as kernels
@@ -269,7 +270,7 @@ class KSD(Metric):
         elif score is not None:
             assert score.shape == X.shape
             score_X = score
-            score_Y = np.copy(score)
+            score_Y = score # np.copy(score)
         else:
             score_X = self.score_fn(X) # n x dim
             score_Y = self.score_fn(Y) # m x dim
@@ -398,7 +399,7 @@ class KSD(Metric):
             boot_stats_degen, _ = bootstrap.compute_bootstrap(X, X, score=score, hvp=hvp, degen=True)
             threshold_nondegen = np.percentile(boot_stats_nondegen - vstat, 100 * (1 - alpha))
             threshold_degen = np.percentile(boot_stats_degen, 100 * (1 - alpha))
-            threshold_max = np.max([threshold_nondegen, threshold_degen])
+            threshold_max = np.max(np.array([threshold_nondegen, threshold_degen]))
             threshold = threshold_max + theta**2
 
         return threshold

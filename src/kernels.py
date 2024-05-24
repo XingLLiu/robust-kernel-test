@@ -345,13 +345,18 @@ class WeightFunction(object):
     def grad(self, X, score, hvp):
         raise NotImplementedError
 
+    def set_sup(self, weighted_score_sup, sup, derivative_sup):
+        self.weighted_score_sup = weighted_score_sup
+        self.sup = sup
+        self.derivative_sup = derivative_sup
+
 class PolyWeightFunction(WeightFunction):
     """#TODO only works for Gaussian score.
 
     For an arbitrary score function, need the hessian of score.
     """
 
-    def __init__(self, b = 0.5, loc = 0., a = 1.):
+    def __init__(self, b = 0.5, loc = 0., a = 1., weighted_score_sup: float = None):
         """m(x) = (1 + \| x - loc \|_2^2 / a^2)^(-b)
         """
         self.loc = np.array(loc)
@@ -359,7 +364,7 @@ class PolyWeightFunction(WeightFunction):
         assert self.b >= 0.5
         self.a = a
 
-        self.weighted_score_sup = 1 / self.a #TODO assuming Gaussian score
+        self.weighted_score_sup = 1 / self.a if weighted_score_sup is None else weighted_score_sup
         self.sup = 1.
         self.derivative_sup = 2. * self.b * self.a
 
