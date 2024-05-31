@@ -361,7 +361,7 @@ class PolyWeightFunction(WeightFunction):
         """
         self.loc = np.array(loc)
         self.b = b
-        assert self.b >= 0.5
+        assert self.b > 0.
         self.a = a
 
         self.weighted_score_sup = 1 / self.a if weighted_score_sup is None else weighted_score_sup

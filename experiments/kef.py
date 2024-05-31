@@ -187,8 +187,6 @@ if __name__ == "__main__":
 
     # args.bw = "med" if args.bw is None else args.bw
 
-    np.random.seed(args.seed)
-
     # 1. generate data
     if args.data == "galaxy":
         galaxy_data, _ = load_galaxies("data/kef/galaxies.rda")
@@ -217,6 +215,10 @@ if __name__ == "__main__":
     kef_l = jnp.sqrt(2)
     kef_p0_std = 3.
 
+    # generate split indices
+    np.random.seed(args.seed)
+    idx_ls = [np.random.choice(range(n), size=ntest, replace=False) for _ in range(args.nrep)]
+
     if args.gen == "True":
         Xtest_res = {}
         score_res = {}
@@ -234,10 +236,11 @@ if __name__ == "__main__":
                 score_ls = []
                 est_params_ls = []
 
-                for _ in trange(args.nrep):
+                for i in trange(args.nrep):
+                
                     # generate data
                     if args.data == "galaxy":
-                        idx = np.random.choice(range(n), size=ntest, replace=False)
+                        idx = idx_ls[i]
                         X_train = galaxy_data[jnp.array([i for i in range(n) if i not in idx], dtype=jnp.int32)]
                         # X_train = sample_outlier_contam(X_train, eps=eps, ol_mean=ol_mean, ol_std=ol_std)
                         X_train = add_outlier(X_train, eps=eps, ol_mean=ol_mean, ol_std=ol_std)

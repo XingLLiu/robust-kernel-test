@@ -333,7 +333,7 @@ class KSD(Metric):
 
     def test_threshold(
             self, n: int, eps0: float = None, theta: float = None, alpha: float = 0.05, method: str = "deviation",
-            X: np.array = None, score=None, hvp=None, nboot: int = 500,
+            X: np.array = None, score=None, hvp=None, nboot: int = 500, return_pval: bool = False
         ):
         """
         Compute the threshold for the robust test. Threshold = \gamma + \theta.
@@ -402,6 +402,19 @@ class KSD(Metric):
             threshold_max = np.max(np.array([threshold_nondegen, threshold_degen]))
             threshold = threshold_max + theta**2
 
+        elif method == "degen_boot":
+            bootstrap = boot.WildBootstrap(self, ndraws=nboot)
+            boot_stats_degen, vstat = bootstrap.compute_bootstrap(X, X, score=score, hvp=hvp, degen=True)
+            boot_stats = np.concatenate([boot_stats_degen, np.array([vstat])])
+            boot_stats_nonsq = boot_stats**0.5
+            threshold = np.percentile(boot_stats_nonsq, 100 * (1 - alpha))
+
+            if return_pval:
+                pval = np.mean(boot_stats_nonsq >= vstat**0.5)
+
+        if return_pval:
+            return threshold, pval
+        
         return threshold
 
     def jackknife(self, X, score=None, hvp=None):
