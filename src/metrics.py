@@ -399,15 +399,26 @@ class KSD(Metric):
             boot_stats_degen, _ = bootstrap.compute_bootstrap(X, X, score=score, hvp=hvp, degen=True)
             threshold_nondegen = np.percentile(boot_stats_nondegen - vstat, 100 * (1 - alpha))
             threshold_degen = np.percentile(boot_stats_degen, 100 * (1 - alpha))
+            # print("threshold_degen", threshold_degen**0.5)
             threshold_max = np.max(np.array([threshold_nondegen, threshold_degen]))
+            # print("threshold_max**0.5", threshold_max**0.5)
             threshold = threshold_max + theta**2
+            # print("threshold", threshold)
+            # print("vstat_nonsq", vstat**0.5)
 
         elif method == "degen_boot":
             bootstrap = boot.WildBootstrap(self, ndraws=nboot)
             boot_stats_degen, vstat = bootstrap.compute_bootstrap(X, X, score=score, hvp=hvp, degen=True)
             boot_stats = np.concatenate([boot_stats_degen, np.array([vstat])])
+            # print("boot_stats", boot_stats.shape)
             boot_stats_nonsq = boot_stats**0.5
             threshold = np.percentile(boot_stats_nonsq, 100 * (1 - alpha))
+            # print("threshold_degen", threshold)
+            # print("vstat_nonsq", vstat**0.5)
+
+            # print("threshold", np.percentile(boot_stats, 100 * (1 - alpha)) + theta**2)
+            # print("threshold", (threshold + theta)**2, threshold**2 + theta**2)
+            # print("nonsq threshold", threshold + theta)
 
             if return_pval:
                 pval = np.mean(boot_stats_nonsq >= vstat**0.5)
