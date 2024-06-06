@@ -342,20 +342,12 @@ class KSD(Metric):
         ws_sup = self.k.weight_fn.weighted_score_sup
         m_sup = self.k.weight_fn.sup
         grad_m_sup = self.k.weight_fn.derivative_sup
-        tau = (ws_sup**2 + 2 * ws_sup * grad_m_sup + grad_m_sup**2) * h_zero + m_sup**2 * gradgrad_h_zero
-        self.tau = tau
+        tau1 = (ws_sup**2 + 2 * ws_sup * grad_m_sup + grad_m_sup**2) * h_zero + m_sup**2 * gradgrad_h_zero
 
-        k_sup = self.k.base_kernel.sup
-        grad_k_first_sup = self.k.base_kernel.grad_first_sup
-        grad_k_second_sup = self.k.base_kernel.grad_second_sup
-        gradgrad_k_sup = self.k.base_kernel.gradgrad_sup
-        tau_star = (ws_sup**2 * k_sup + 
-            ws_sup * grad_k_second_sup * m_sup + ws_sup * k_sup * grad_m_sup +
-            ws_sup * grad_k_first_sup * m_sup + ws_sup * k_sup * grad_m_sup +
-            grad_m_sup**2 * k_sup + m_sup * grad_k_first_sup * grad_m_sup +
-            grad_m_sup * grad_k_second_sup * m_sup + m_sup**2 * gradgrad_k_sup
-        )
-        self.tau_star = tau_star
+        tau2 = (ws_sup + max([grad_m_sup**2, m_sup**2 * gradgrad_h_zero])**0.5)**2
+
+        tau = min([tau1, tau2])
+        self.tau = tau
 
         # set theta
         if theta == "ol":
@@ -371,14 +363,6 @@ class KSD(Metric):
             
             # 2. threshold for (non-squared) P-KSD
             threshold = np.sqrt(tau / n) + np.sqrt(- 2 * tau * (np.log(alpha)) / n)
-
-        elif method == "ol_robust":
-            m0 = int(np.floor(eps0 * n))
-            term1 = 2 * eps0 * tau_star * np.sqrt(2 * np.log(2 / alpha) / m0)
-            term2 = eps0**2 * tau
-            gamma_m0 = np.sqrt(max(tau, tau_star) / m0) + np.sqrt(- 2 * tau * (np.log(alpha)) / m0)
-
-            threshold = np.sqrt(gamma_m0**2 + term1 + term2)
 
         elif method == "ball_robust":
             gamma_n = np.sqrt(tau / n) + np.sqrt(- 2 * tau * (np.log(alpha)) / n)
