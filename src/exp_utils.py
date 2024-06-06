@@ -68,10 +68,10 @@ def run_tests(samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=N
 
         ksd = metrics.KSD(kernel)
         wild_boot = boot.WildBootstrap(ksd)
-        pval, stat, boot_stats = wild_boot.pval(X, X, return_stat=True, return_boot=True, score=score)
+        pval, vstat, boot_stats = wild_boot.pval(X, X, return_stat=True, return_boot=True, score=score)
         ustat = ksd(X, X, vstat=False, score=score)
-        res["standard"]["stat"].append(stat)
-        res["standard"]["nonsq_stat"].append(stat**0.5)
+        res["standard"]["stat"].append(vstat)
+        res["standard"]["nonsq_stat"].append(vstat**0.5)
         res["standard"]["u_stat"].append(ustat)
         res["standard"]["pval"].append(pval)
         res["standard"]["rej"].append(int(pval < alpha))
@@ -83,78 +83,41 @@ def run_tests(samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=N
         kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
 
         ksd = metrics.KSD(kernel)
-        wild_boot = boot.WildBootstrap(ksd)
-        pval, stat, boot_stats = wild_boot.pval(X, X, return_stat=True, return_boot=True, score=score, hvp=hvp)
-        nonsq_stat = stat**0.5
         ustat = ksd(X, X, vstat=False, score=score, hvp=hvp)
-        res["tilted"]["stat"].append(stat)
-        res["tilted"]["nonsq_stat"].append(nonsq_stat)
-        res["tilted"]["u_stat"].append(ustat)
-        res["tilted"]["pval"].append(pval)
-        res["tilted"]["rej"].append(int(pval < alpha))
-        res["tilted"]["boot_stats"].append(boot_stats)
-        
-        # # tilted ol robust
-        # if eps0 is not None:
-        #     res["tilted_ol_robust"]["stat"].append(stat)
-        #     res["tilted_ol_robust"]["nonsq_stat"].append(nonsq_stat)
-        #     res["tilted_ol_robust"]["u_stat"].append(ustat)
-        #     threshold = ksd.test_threshold(n=n, eps0=eps0, alpha=alpha, method="ol_robust")
-        #     res["tilted_ol_robust"]["threshold"].append(threshold)
-        #     res["tilted_ol_robust"]["rej"].append(int(nonsq_stat > threshold))
-        
-        # # 4. tilted ball robust
-        # threshold = ksd.test_threshold(n=n, eps0=eps0, theta=theta, alpha=alpha, method="ball_robust")
-        # res["tilted_robust_dev"]["stat"].append(stat)
-        # res["tilted_robust_dev"]["nonsq_stat"].append(nonsq_stat)
-        # res["tilted_robust_dev"]["u_stat"].append(ustat)
-        # res["tilted_robust_dev"]["threshold"].append(threshold)
-        # res["tilted_robust_dev"]["theta"].append(ksd.theta)
-        # res["tilted_robust_dev"]["gamma"].append(threshold - ksd.theta)
-        # res["tilted_robust_dev"]["rej"].append(int(nonsq_stat > threshold))
-        # res["tilted_robust_dev"]["tau"].append(ksd.tau)
-        # res["tilted_robust_dev"]["ksd_class"].append(ksd)
-
-        # # 5. tilted ball robust CLT
-        # threshold = ksd.test_threshold(
-        #     n=n, eps0=eps0, theta=theta, alpha=alpha, method="CLT", X=X, score=score, hvp=hvp
-        # )
-        # # TODO do not save threshold as it depends on theta and needs to be updated when theta is
-        # res["tilted_robust_clt"]["stat"].append(stat)
-        # res["tilted_robust_clt"]["nonsq_stat"].append(nonsq_stat)
-        # res["tilted_robust_clt"]["u_stat"].append(ustat)
-        # res["tilted_robust_clt"]["threshold"].append(threshold)
-        # res["tilted_robust_clt"]["theta"].append(ksd.theta)
-        # res["tilted_robust_clt"]["var_hat"].append(ksd.var_hat)
-        # res["tilted_robust_clt"]["gamma"].append(np.sqrt(threshold - ksd.theta**2))
-        # res["tilted_robust_clt"]["rej"].append(int(stat > threshold))
-
-        # 6. bootstrap
-        threshold = ksd.test_threshold(
-            n=n, eps0=eps0, theta=theta, alpha=alpha, method="boot", X=X, score=score, hvp=hvp
-        )
-        # # TODO do not save threshold as it depends on theta and needs to be updated when theta is
-        res["tilted_r_bootmax"]["stat"].append(stat)
-        res["tilted_r_bootmax"]["nonsq_stat"].append(nonsq_stat)
-        res["tilted_r_bootmax"]["u_stat"].append(ustat)
-        res["tilted_r_bootmax"]["threshold"].append(threshold)
-        res["tilted_r_bootmax"]["theta"].append(ksd.theta)
-        res["tilted_r_bootmax"]["gamma"].append(np.sqrt(threshold - ksd.theta**2))
-        res["tilted_r_bootmax"]["rej"].append(int(stat > threshold))
-        res["tilted_r_bootmax"]["tau"].append(ksd.tau)
-
-        # # 7. bootstrap degen
-        threshold, pval = ksd.test_threshold(
-            n=n, eps0=eps0, theta=theta, alpha=alpha, method="degen_boot", X=X, score=score, 
+        thresh_res = ksd.test_threshold(
+            n=n, eps0=eps0, theta=theta, alpha=alpha, method="boot_both", X=X, score=score, 
             hvp=hvp, return_pval=True,
         )
-        res["tilted_r_boot"]["stat"].append(stat)
+        q_max = thresh_res["q_max"]
+        q_degen_nonsq = thresh_res["q_degen_nonsq"]
+        pval_standard = thresh_res["pval_standard"]
+        vstat = thresh_res["vstat"]
+        nonsq_stat = vstat**0.5
+
+        res["tilted"]["stat"].append(vstat)
+        res["tilted"]["nonsq_stat"].append(nonsq_stat)
+        res["tilted"]["u_stat"].append(ustat)
+        res["tilted"]["pval"].append(pval_standard)
+        res["tilted"]["rej"].append(int(pval_standard < alpha))
+        
+        # 7. bootstrap degen
+        res["tilted_r_boot"]["stat"].append(vstat)
         res["tilted_r_boot"]["nonsq_stat"].append(nonsq_stat)
         res["tilted_r_boot"]["u_stat"].append(ustat)
-        res["tilted_r_boot"]["threshold"].append(threshold)
-        res["tilted_r_boot"]["gamma"].append(threshold)
+        res["tilted_r_boot"]["threshold"].append(q_degen_nonsq)
+        res["tilted_r_boot"]["gamma"].append(q_degen_nonsq)
         res["tilted_r_boot"]["theta"].append(ksd.theta)
-        res["tilted_r_boot"]["pval"].append(pval)
-        res["tilted_r_boot"]["rej"].append(int(max(0, nonsq_stat - ksd.theta) > threshold))
-    
+        res["tilted_r_boot"]["rej"].append(int(max(0, nonsq_stat - ksd.theta) > q_degen_nonsq))
+        res["tilted_r_boot"]["pval"].append(thresh_res["pval_degen"])
+
+        # 6. bootstrap
+        res["tilted_r_bootmax"]["stat"].append(vstat)
+        res["tilted_r_bootmax"]["nonsq_stat"].append(nonsq_stat)
+        res["tilted_r_bootmax"]["u_stat"].append(ustat)
+        res["tilted_r_bootmax"]["threshold"].append(q_max + ksd.theta**2)
+        res["tilted_r_bootmax"]["theta"].append(ksd.theta)
+        res["tilted_r_bootmax"]["gamma"].append(np.sqrt(q_max))
+        res["tilted_r_bootmax"]["rej"].append(int(vstat > q_max + ksd.theta**2))
+        res["tilted_r_bootmax"]["tau"].append(ksd.tau)
+
     return res

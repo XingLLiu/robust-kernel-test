@@ -132,7 +132,8 @@ def load_galaxies(path: str):
     unnormalized = jnp.array(converted["galaxies"]).reshape(-1, 1)
 
     location = unnormalized.mean()
-    scale = 0.5 * unnormalized.std()
+    # scale = 0.5 * unnormalized.std()
+    scale = unnormalized.std() #!
     normalized = (unnormalized - location) / scale
 
     def unnormalize(x: np.ndarray) -> np.ndarray:
@@ -192,6 +193,7 @@ if __name__ == "__main__":
         galaxy_data, _ = load_galaxies("data/kef/galaxies.rda")
         n = galaxy_data.shape[0]
         ntest = int(.5 * n)
+        # ntest = int(.4 * n)
     else:
         n = 100
         ntest = 100
@@ -200,7 +202,8 @@ if __name__ == "__main__":
         # level experiments
         eps_ls = [0., 0.1, 0.2, 0.3]
         ol_mean_ls = [10., 20.]
-        L = 25
+        # L = 25
+        L = 25 #!
         ol_std = 0.1
 
     elif args.exp == "power":
@@ -211,9 +214,14 @@ if __name__ == "__main__":
         ol_mean = 0.
         ol_std = .1
 
+        L_ls = [1, 2, 3, 5]
+
     # other params
-    kef_l = jnp.sqrt(2)
-    kef_p0_std = 3.
+    # kef_l = jnp.sqrt(2)
+    # kef_p0_std = 3.
+
+    kef_l = jnp.sqrt(.5) #!
+    kef_p0_std = 3. #!
 
     # generate split indices
     np.random.seed(args.seed)
@@ -264,7 +272,10 @@ if __name__ == "__main__":
                     kef = KernelExpFamily(params=None, bw=kef_l, L=L, p0_loc=0., p0_scale=kef_p0_std)
 
                     poly_weight_fn = kernels.PolyWeightFunction(a=1.)
-                    kernel0 = kernels.IMQ(sigma_sq=2*1.**2, X=None, Y=None)
+                    # kernel0 = kernels.IMQ(sigma_sq=2*1.**2, X=None, Y=None)
+                    kernel0 = kernels.SumKernel(
+                        [kernels.IMQ(sigma_sq=2*l, X=None, Y=None) for l in [0.6, 1., 1.2]]
+                    ) #!
                     kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=poly_weight_fn)
                     est_params = kef.ksd_est(X_train, kernel)
 
@@ -284,8 +295,12 @@ if __name__ == "__main__":
                 est_params_res[eps][ol_mean] = jnp.stack(est_params_ls, 0)
 
                 # find tau
+                # xx = jnp.concatenate(
+                #     [jnp.linspace(-30., 0, 10001), jnp.linspace(0., 30, 10001)],
+                #     0,
+                # )
                 xx = jnp.concatenate(
-                    [jnp.linspace(-30., 0, 10001), jnp.linspace(0., 30, 10001)],
+                    [jnp.linspace(-15., 0, 10001), jnp.linspace(15., 30, 10001)],
                     0,
                 )
                 xx = jnp.reshape(xx, (-1, 1))
@@ -301,6 +316,7 @@ if __name__ == "__main__":
                 
                 tau = jnp.max(ksd_vals)
                 tau_res[eps][ol_mean] = tau
+                # print("tau", tau)
 
         # save data
         pickle.dump(Xtest_res, open(os.path.join(SAVE_DIR, f"kef_{args.data}_{args.exp}_X_res_seed{args.seed}.pkl"), "wb"))
@@ -317,6 +333,8 @@ if __name__ == "__main__":
     print("start testing")
     eps_ls = list(X_res.keys())
     ol_mean_ls = list(X_res[eps_ls[0]].keys())
+    bw = 2.*1**2
+    # bw = "med"
     res = {}
     for eps in eps_ls:
         res[eps] = {}
@@ -327,7 +345,7 @@ if __name__ == "__main__":
 
             res[eps][ol_mean] = exp_utils.run_tests(
                 samples=Xs, scores=scores, hvps=None, hvp_denom_sup=None, 
-                theta=theta, bw=2.*1**2, alpha=0.05, verbose=True, base_kernel="IMQ", weight_fn_args=None,
+                theta=theta, bw=bw, alpha=0.05, verbose=True, base_kernel="IMQ", weight_fn_args=None,
             )
 
     # 3. save results

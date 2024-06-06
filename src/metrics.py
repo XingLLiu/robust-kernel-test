@@ -423,6 +423,36 @@ class KSD(Metric):
             if return_pval:
                 pval = np.mean(boot_stats_nonsq >= vstat**0.5)
 
+        elif method == "boot_both":
+            bootstrap = boot.WildBootstrap(self, ndraws=nboot)
+            boot_stats_nondegen, vstat = bootstrap.compute_bootstrap(X, X, score=score, hvp=hvp, degen=False)
+            boot_stats_nondegen = np.concatenate([boot_stats_nondegen, np.array([vstat])])
+            
+            boot_stats_degen, _ = bootstrap.compute_bootstrap(X, X, score=score, hvp=hvp, degen=True)
+            boot_stats_degen = np.concatenate([boot_stats_degen, np.array([vstat])])
+
+            # p-value for standard test
+            pval_standard = np.mean(boot_stats_degen >= vstat)
+
+            # quantile for boot max
+            q_nondegen = np.percentile(boot_stats_nondegen - vstat, 100 * (1 - alpha))
+            q_degen = np.percentile(boot_stats_degen, 100 * (1 - alpha))
+            q_max = np.max(np.array([q_nondegen, q_degen]))
+            threshold_max = q_max + theta**2
+            # pval_max = max([
+            #     np.mean(boot_stats_degen >= vstat - self.theta**2), 
+            #     np.mean(boot_stats_nondegen >= vstat - self.theta**2)]
+            # )
+
+            # quantile for boot degen
+            boot_stats_nonsq = boot_stats_degen**0.5
+            q_degen_nonsq = np.percentile(boot_stats_nonsq, 100 * (1 - alpha))
+            pval_degen = np.mean(boot_stats_nonsq >= vstat**0.5 - self.theta)
+
+            res = {"q_max": q_max, "q_degen_nonsq": q_degen_nonsq, "pval_standard": pval_standard, "vstat": vstat, "pval_degen": pval_degen}
+
+            return res
+
         if return_pval:
             return threshold, pval
         
