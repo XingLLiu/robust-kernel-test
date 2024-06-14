@@ -80,6 +80,7 @@ if __name__ == "__main__":
     theta = 0.1
     if args.setup == "level" or args.setup == "model_full":
         eps_ls = [0., 0.2, 0.4, 0.6, 0.8, 1.]
+        std_ls = [0., 10., 50., 100.]
 
         res = {eps: {} for eps in eps_ls}
         for eps in eps_ls:

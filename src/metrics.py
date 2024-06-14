@@ -331,13 +331,7 @@ class KSD(Metric):
         elif output_dim == 2:
             return u_p
 
-    def test_threshold(
-            self, n: int, eps0: float = None, theta: float = None, alpha: float = 0.05, method: str = "deviation",
-            X: np.array = None, score=None, hvp=None, nboot: int = 500, return_pval: bool = False
-        ):
-        """
-        Compute the threshold for the robust test. Threshold = \gamma + \theta.
-        """
+    def compute_tau(self):
         h_zero, gradgrad_h_zero = self.k.base_kernel.eval_zero()
         ws_sup = self.k.weight_fn.weighted_score_sup
         m_sup = self.k.weight_fn.sup
@@ -348,6 +342,16 @@ class KSD(Metric):
 
         tau = min([tau1, tau2])
         self.tau = tau
+        return tau
+
+    def test_threshold(
+            self, n: int, eps0: float = None, theta: float = None, alpha: float = 0.05, method: str = "deviation",
+            X: np.array = None, score=None, hvp=None, nboot: int = 500, return_pval: bool = False
+        ):
+        """
+        Compute the threshold for the robust test. Threshold = \gamma + \theta.
+        """
+        tau = self.compute_tau()
 
         # set theta
         if theta == "ol":

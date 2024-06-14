@@ -17,10 +17,10 @@ def change_theta(res, methods, theta):
         #     res[mm]["rej"] = [int(stat**0.5 > gam + theta) for stat, gam in zip(res[mm]["stat"], res[mm]["gamma"])]
         # elif mm == "tilted_robust_clt":
         #     res[mm]["rej"] = [int(stat > gam**2 + theta**2) for stat, gam in zip(res[mm]["stat"], res[mm]["gamma"])]
-        if mm == "tilted_r_bootmax":
-            res[mm]["rej"] = [int(stat > gam**2 + theta**2) for stat, gam in zip(res[mm]["stat"], res[mm]["gamma"])]
-        elif mm == "tilted_r_boot":
+        if mm == "tilted_r_boot":
             res[mm]["rej"] = [int(max(0, stat**0.5 - theta) > gam) for stat, gam in zip(res[mm]["stat"], res[mm]["gamma"])]
+        elif mm == "tilted_r_bootmax":
+            res[mm]["rej"] = [int(stat > gam**2 + theta**2) for stat, gam in zip(res[mm]["stat"], res[mm]["gamma"])]
     
     return res
 

@@ -62,13 +62,18 @@
 # echo "Finished testing NF full noise" >> test.txt
 # date >> test.txt
 
+date > test.txt
+taskset -c 0-20 python3 experiments/nf_test.py --n=500 --nexp=500 --setup=model_full
+echo "Finished testing NF full noise" >> test.txt
+date >> test.txt
+
 # # power
 # taskset -c 3-10 python3 experiments/nf_test.py --n=500 --nexp=200 --setup=power &
 # taskset -c 11-18 python3 experiments/nf_test.py --n=500 --nexp=500 --setup=power
 
 # # mnist
-for nexp in 100 200 300 400 500
-do
-    taskset -c 0-10 python3 experiments/nf_test.py --n=500 --nexp=$nexp --setup=mnist
-done
+# for nexp in 100 200 300 400 500
+# do
+#     taskset -c 0-10 python3 experiments/nf_test.py --n=500 --nexp=$nexp --setup=mnist
+# done
 
