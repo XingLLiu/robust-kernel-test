@@ -203,10 +203,11 @@ def inference_loop_multiple_chains(
 def sample_outlier_contam(X: jnp.ndarray, eps: float, ol_mean: float, ol_std: float):
     n, d = X.shape[0], X.shape[1]
     ncontam = int(n * eps)
-    outliers = np.reshape(
-        np.random.normal(size=(ncontam,), loc=ol_mean, scale=ol_std),
-        (-1, d),
-    )
+    # outliers = np.reshape(
+    #     np.random.normal(size=(ncontam,), loc=ol_mean, scale=ol_std),
+    #     (-1, d),
+    # )
+    outliers = np.random.multivariate_normal(mean=ol_mean, cov=np.eye(d)*ol_std, size=ncontam)
     idx = np.random.choice(range(n), size=ncontam, replace=False) # ncontam
     X = X.at[idx].set(outliers)
     return X

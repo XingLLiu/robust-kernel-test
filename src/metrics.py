@@ -1,6 +1,8 @@
 # import numpy as np
+import jax
 import jax.numpy as np
 import scipy.stats as sci_stats
+from numpy.random import multinomial
 import src.bootstrap as boot
 import src.kernels as kernels
 
@@ -206,6 +208,13 @@ class MMD(Metric):
             boot_stats = np.array(boot_stats_X) + np.array(boot_stats_Y)
             return boot_stats
                 
+        elif method == "bootstrap_degen":
+            assert Y is not None, "Y must be provided for the full bootstrap."
+            boot_stats_X = self.compute_bootstrap(X=X)
+            boot_stats_Y = self.compute_bootstrap(X=Y)
+            boot_stats = boot_stats_X + boot_stats_Y
+            return boot_stats
+
     def reverse_test(self, X, Y, theta: float, alpha: float = 0.05, method = "deviation"):
         
         if method == "CLT" or method == "CLT_proper":
@@ -226,6 +235,17 @@ class MMD(Metric):
 
         return res
 
+    def compute_bootstrap(self, X, nboot: int = 1000):
+        n = X.shape[0]
+        K_XX = self.kernel(X, X)
+        
+        r = np.array(multinomial(n, pvals=[1/n]*n, size=nboot) - 1)
+        rr = np.expand_dims(r, -1) * np.expand_dims(r, -2)
+        
+        K_XX_boot = K_XX[np.newaxis] * rr
+        
+        boot = K_XX_boot.mean([-1, -2])
+        return boot
 
 class KSD(Metric):
     def __init__(
@@ -475,6 +495,23 @@ class KSD(Metric):
         # var = term1 - term2 + 1e-12
 
         return var
+
+    def eval_single_arg(self, X, score=None, hvp=None):
+        idx = np.arange(X.shape[0])
+        if hvp is not None:
+            res = jax.vmap(
+                lambda i: self._eval_single_arg(X[[i], :], score[[i], :], hvp[[i], :])
+            )(idx)
+
+        else:
+            res = jax.vmap(
+                lambda i: self._eval_single_arg(X[[i], :], score[[i], :])
+            )(idx)
+
+        return res
+
+    def _eval_single_arg(self, x, score, hvp=None):
+        return self.__call__(x, x, score=score, hvp=hvp, vstat=True)
 
 
 class KSdistance(Metric):

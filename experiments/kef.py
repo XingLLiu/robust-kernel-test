@@ -115,10 +115,6 @@ def compute_js_and_sqrt_factorials(p: int):
         sqrt_factorials.append(sqrt_factorials[-1] * jnp.sqrt(j))
     return js, jnp.array(sqrt_factorials)
 
-def compute_weighted_score_sup(p: int, p0_std: float, params: jax.Array):
-    term1 = 1 / p0_std
-    # term2 = # TODO
-
 def compute_c(a, b):
     """compute C_{a, b} = (0.5*(b + 2 + a))**(b/2) * |a/2 - b/2 - 1| * exp(-0.25 * (b+2+a))
     """

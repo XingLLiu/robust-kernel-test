@@ -31,8 +31,8 @@ def run_tests(samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=N
         "tilted": {"nonsq_stat": [], "stat": [], "u_stat": [], "pval": [], "rej": [], "boot_stats": []},
         # "tilted_robust_dev": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "tau": [], "ksd_class": []},
         # "tilted_robust_clt": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "var_hat": []},
-        "tilted_r_bootmax": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "tau": []},
         "tilted_r_boot": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "pval": []},
+        "tilted_r_bootmax": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "tau": []},
     }
     res["theta"] = theta
 
@@ -69,6 +69,7 @@ def run_tests(samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=N
         ksd = metrics.KSD(kernel)
         wild_boot = boot.WildBootstrap(ksd)
         pval, vstat, boot_stats = wild_boot.pval(X, X, return_stat=True, return_boot=True, score=score)
+        # print("vstat", vstat)
         ustat = ksd(X, X, vstat=False, score=score)
         res["standard"]["stat"].append(vstat)
         res["standard"]["nonsq_stat"].append(vstat**0.5)
