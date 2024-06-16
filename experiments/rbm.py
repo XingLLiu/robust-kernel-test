@@ -58,9 +58,10 @@ if __name__ == "__main__":
         Xs_raw = jnp.empty((args.nrep, args.n, args.dim))
 
         # generate raw data
-        # nrep_keys = jax.random.split(keys[3], args.nrep)
+        nrep_keys = jax.random.split(keys[3], args.nrep)
+        nrep_seed = jax.random.key_data(nrep_keys)
         for i in trange(args.nrep):
-            X = rbm_sampler.sample(args.n).data()
+            X = rbm_sampler.sample(args.n, seed=nrep_seed[i, 1]).data()
             Xs_raw = Xs_raw.at[i].set(X)
 
         # perturb

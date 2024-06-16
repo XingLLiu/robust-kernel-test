@@ -69,7 +69,6 @@ def run_tests(samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=N
         ksd = metrics.KSD(kernel)
         wild_boot = boot.WildBootstrap(ksd)
         pval, vstat, boot_stats = wild_boot.pval(X, X, return_stat=True, return_boot=True, score=score)
-        # print("vstat", vstat)
         ustat = ksd(X, X, vstat=False, score=score)
         res["standard"]["stat"].append(vstat)
         res["standard"]["nonsq_stat"].append(vstat**0.5)
