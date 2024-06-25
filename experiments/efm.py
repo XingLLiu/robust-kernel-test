@@ -1,7 +1,6 @@
 import numpy as np
 import jax
 import jax.numpy as jnp
-import blackjax
 import pickle
 import os
 from tqdm import trange
@@ -182,31 +181,27 @@ def compute_hvp(f, x, v):
 #   return jax.jvp(jax.grad(f), primals, tangents)[1]
 
 
-def inference_loop_multiple_chains(
-    rng_key, initial_states, tuned_params, log_prob_fn, num_samples, num_chains
-):
-    kernel = blackjax.nuts.build_kernel()
+# def inference_loop_multiple_chains(
+#     rng_key, initial_states, tuned_params, log_prob_fn, num_samples, num_chains
+# ):
+#     kernel = blackjax.nuts.build_kernel()
 
-    def step_fn(key, state, **params):
-        return kernel(key, state, log_prob_fn, **params)
+#     def step_fn(key, state, **params):
+#         return kernel(key, state, log_prob_fn, **params)
 
-    def one_step(states, rng_key):
-        keys = jax.random.split(rng_key, num_chains)
-        states, infos = jax.vmap(step_fn)(keys, states, **tuned_params)
-        return states, (states, infos)
+#     def one_step(states, rng_key):
+#         keys = jax.random.split(rng_key, num_chains)
+#         states, infos = jax.vmap(step_fn)(keys, states, **tuned_params)
+#         return states, (states, infos)
 
-    keys = jax.random.split(rng_key, num_samples)
-    _, (states, infos) = jax.lax.scan(one_step, initial_states, keys)
+#     keys = jax.random.split(rng_key, num_samples)
+#     _, (states, infos) = jax.lax.scan(one_step, initial_states, keys)
 
-    return (states, infos)
+#     return (states, infos)
 
 def sample_outlier_contam(X: jnp.ndarray, eps: float, ol_mean: float, ol_std: float):
     n, d = X.shape[0], X.shape[1]
     ncontam = int(n * eps)
-    # outliers = np.reshape(
-    #     np.random.normal(size=(ncontam,), loc=ol_mean, scale=ol_std),
-    #     (-1, d),
-    # )
     outliers = np.random.multivariate_normal(mean=ol_mean, cov=np.eye(d)*ol_std, size=ncontam)
     idx = np.random.choice(range(n), size=ncontam, replace=False) # ncontam
     X = X.at[idx].set(outliers)

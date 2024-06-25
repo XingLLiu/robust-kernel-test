@@ -4,6 +4,8 @@ from tqdm import tqdm, trange
 import src.metrics as metrics
 import src.kernels as kernels
 import src.bootstrap as boot
+import src.ksdagg as src_ksdagg
+# import ksdagg
 
 
 def change_theta(res, methods, theta):
@@ -25,12 +27,10 @@ def change_theta(res, methods, theta):
     return res
 
 def run_tests(samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=None, alpha=0.05, verbose=False,
-              weight_fn_args=None, base_kernel="IMQ"):
+              weight_fn_args=None, base_kernel="IMQ", run_ksdagg=False, ksdagg_bw=None):
     res = {
         "standard": {"nonsq_stat": [], "stat": [], "u_stat": [], "pval": [], "rej": [], "boot_stats": []},
         "tilted": {"nonsq_stat": [], "stat": [], "u_stat": [], "pval": [], "rej": [], "boot_stats": []},
-        # "tilted_robust_dev": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "tau": [], "ksd_class": []},
-        # "tilted_robust_clt": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "var_hat": []},
         "tilted_r_boot": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "pval": []},
         "tilted_r_bootmax": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "tau": []},
     }
@@ -53,6 +53,10 @@ def run_tests(samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=N
     elif base_kernel == "RBF":
         base_kernel_class = kernels.RBF
 
+    # include ksdagg if specified
+    if run_ksdagg:
+        res["ksdagg"] = {"rej": [], "summary": []}
+
     iterator = range(len(samples)) if not verbose else trange(len(samples))
     for i in iterator:
 
@@ -61,7 +65,7 @@ def run_tests(samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=N
         hvp = hvps[i] if hvps is not None else None
         
         n = X.shape[-2]
-        kernel_args = {"sigma_sq": None, "med_heuristic": True, "X": X, "Y": X} if bw == "med" else {"sigma_sq": bw}
+        kernel_args = {"sigma_sq": None, "med_heuristic": True, "X": X, "Y": X} if bw == "med" else {"sigma_sq": 2*bw}
 
         # 1. standard
         kernel = base_kernel_class(**kernel_args)
@@ -78,9 +82,9 @@ def run_tests(samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=N
         res["standard"]["boot_stats"].append(boot_stats)
 
         # 2. tilted
-        score_weight_fn = weight_fn_class(**weight_fn_args)
+        weight_fn = weight_fn_class(**weight_fn_args)
         kernel0 = base_kernel_class(**kernel_args)
-        kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
+        kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=weight_fn)
 
         ksd = metrics.KSD(kernel)
         ustat = ksd(X, X, vstat=False, score=score, hvp=hvp)
@@ -119,5 +123,12 @@ def run_tests(samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=N
         res["tilted_r_bootmax"]["gamma"].append(np.sqrt(q_max))
         res["tilted_r_bootmax"]["rej"].append(int(vstat > q_max + ksd.theta**2))
         res["tilted_r_bootmax"]["tau"].append(ksd.tau)
+
+        if run_ksdagg:
+            # rej_ksdagg = src_ksdagg.ksdagg(X, score, kernel=base_kernel_class, weight_fn=weight_fn)
+            # rej_ksdagg, summary_ksdagg = src_ksdagg.ksdagg(X, score, kernel="imq", return_dictionary=True)
+            rej_ksdagg, summary_ksdagg = src_ksdagg.ksdagg(X, score, bandwidths=ksdagg_bw, return_dictionary=True)
+            res["ksdagg"]["rej"].append(rej_ksdagg.item())
+            res["ksdagg"]["summary"].append(summary_ksdagg)
 
     return res

@@ -58,6 +58,7 @@ class WildBootstrap(Bootstrap):
         n = X.shape[-2]
         if degen:
             # r = np.random.choice([-1, 1], size=(self.ndraws, n)) # b, n
+            # r = r - np.mean(r, -1, keepdims=True) # b, n
             r = np.random.multinomial(n, pvals=[1/n]*n, size=self.ndraws) - 1 # b, n
         else:
             r = np.random.multinomial(n, pvals=[1/n]*n, size=self.ndraws) # b, n
@@ -67,13 +68,6 @@ class WildBootstrap(Bootstrap):
         test_stat = np.sum(vstat) / (n**2)
         
         # compute bootstrap stats
-
-        # matrix approach
-        # mask = np.expand_dims(r, -1) * np.expand_dims(r, -2) # b, n, n
-        # boot_stats_mat = mask * np.expand_dims(vstat, -3) # b, n, n
-        # boot_stats = np.sum(boot_stats_mat, axis=(-2, -1)) / (n**2) # b
-        
-        # vector approach
         boot_stats = np.matmul(vstat, np.expand_dims(r, -1)) # b, n, n
         boot_stats = np.sum(np.squeeze(boot_stats, -1) * r, -1) / (n**2) # b
 

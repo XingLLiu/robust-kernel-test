@@ -20,21 +20,24 @@ setup(
     packages=find_packages(include=["src", "src.*"]),
 
     # See https://www.python.org/dev/peps/pep-0440/#version-specifiers
-    python_requires=">= 3.8",
+    python_requires=">= 3.9",
 
     # List run-time dependencies here.  These will be installed by pip when
     # your project is installed. For an analysis of "install_requires" vs pip's
     # requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
     install_requires=[
-        "numpy",
+        "numpy==1.26.4",
         "jax[cpu]",
         "pandas",
         "scipy",
         "matplotlib",
-        "jupyter>=7.0",
+        "notebook>=7.0",
         "scikit-learn",
         "tqdm",
-        "seaborn"
+        "seaborn",
+        "jaxopt",
+        "rdata",
+        "https://github.com/wittawatj/kernel-gof.git"
     ]
 )

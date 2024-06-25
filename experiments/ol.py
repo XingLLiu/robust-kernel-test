@@ -30,6 +30,7 @@ if __name__ == "__main__":
     parser.add_argument("--nrep", type=int)
     parser.add_argument("--bw", type=float, default=None)
     parser.add_argument("--gen", type=bool, default=True)
+    parser.add_argument("--run_ksdagg", type=bool, default=False)
     args = parser.parse_args()
 
     args.bw = "med" if args.bw is None else args.bw
@@ -104,6 +105,7 @@ if __name__ == "__main__":
                 samples=X_res[ol][eps], scores=score_res[ol][eps], hvps=hvp_res[ol][eps], 
                 hvp_denom_sup=hvp_denom_sup, 
                 theta="ol", eps0=eps0, bw="med", alpha=0.05, verbose=True,
+                run_ksdagg=bool(args.run_ksdagg),
             )
 
     # 3. save results

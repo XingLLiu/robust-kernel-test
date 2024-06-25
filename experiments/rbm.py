@@ -1,7 +1,6 @@
 import numpy as np
 import jax
 import jax.numpy as jnp
-import blackjax
 import pickle
 import os
 from tqdm import trange
@@ -28,6 +27,15 @@ Path(SAVE_DIR).mkdir(exist_ok=True, parents=True)
 def minus_stein_kernel(x, ksd):
     s = ksd.score_fn(x)
     return -ksd(x, x, score=s, vstat=True)
+
+def optimize(init_val, fn, maxiter):
+    solver = jaxopt.LBFGS(fun=lambda x: minus_stein_kernel(x, fn), maxiter=maxiter)
+    opt_res = solver.run(init_val.reshape(1, -1))
+    return opt_res.state.value
+
+def parallel_optimize(init_vals, fn, maxiter):
+    res = jax.vmap(lambda x: optimize(x, fn, maxiter))(init_vals)
+    return res
 
 
 if __name__ == "__main__":
@@ -60,6 +68,7 @@ if __name__ == "__main__":
         # generate raw data
         nrep_keys = jax.random.split(keys[3], args.nrep)
         nrep_seed = jax.random.key_data(nrep_keys)
+        print("Sampling data")
         for i in trange(args.nrep):
             X = rbm_sampler.sample(args.n, seed=nrep_seed[i, 1]).data()
             Xs_raw = Xs_raw.at[i].set(X)
@@ -74,7 +83,7 @@ if __name__ == "__main__":
             scores = jnp.empty((args.nrep, args.n, args.dim))
 
             for i in trange(args.nrep):
-                X = exp_efm.sample_outlier_contam(Xs[i], eps=eps, ol_mean=np.ones((args.dim,)), ol_std=0.1)
+                X = exp_efm.sample_outlier_contam(Xs[i], eps=eps, ol_mean=np.zeros((args.dim,)), ol_std=0.1)
                 Xs = Xs.at[i].set(X)
                 scores = scores.at[i].set(rbm_model.grad_log(X))
 
@@ -87,22 +96,21 @@ if __name__ == "__main__":
             kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
             ksd = metrics.KSD(kernel, score_fn=rbm_model.grad_log)
         
-            init_val = X[[0], :]
-            solver = jaxopt.LBFGS(fun=lambda x: minus_stein_kernel(x, ksd), maxiter=500)
-            opt_res = solver.run(init_val)
-            tau = -opt_res.state.value
+            opt_res = parallel_optimize(Xs[0, :20], ksd, maxiter=500)
+            tau = jnp.max(-opt_res)
             tau_res[eps] = tau
+            print("tau", tau)
 
         # save data
-        pickle.dump(Xs_res, open(os.path.join(SAVE_DIR, f"X_res_seed{args.seed}.pkl"), "wb"))
-        pickle.dump(scores_res, open(os.path.join(SAVE_DIR, f"score_res_seed{args.seed}.pkl"), "wb"))
-        pickle.dump(tau_res, open(os.path.join(SAVE_DIR, f"tau_seed{args.seed}.pkl"), "wb"))
+        pickle.dump(Xs_res, open(os.path.join(SAVE_DIR, f"X_res_n{args.n}_seed{args.seed}.pkl"), "wb"))
+        pickle.dump(scores_res, open(os.path.join(SAVE_DIR, f"score_res_n{args.n}_seed{args.seed}.pkl"), "wb"))
+        pickle.dump(tau_res, open(os.path.join(SAVE_DIR, f"tau_n{args.n}_seed{args.seed}.pkl"), "wb"))
 
 
     # 2. run test
-    X_res = pickle.load(open(os.path.join(SAVE_DIR, f"X_res_seed{args.seed}.pkl"), "rb"))
-    score_res = pickle.load(open(os.path.join(SAVE_DIR, f"score_res_seed{args.seed}.pkl"), "rb"))
-    tau_res = pickle.load(open(os.path.join(SAVE_DIR, f"tau_seed{args.seed}.pkl"), "rb"))
+    X_res = pickle.load(open(os.path.join(SAVE_DIR, f"X_res_n{args.n}_seed{args.seed}.pkl"), "rb"))
+    score_res = pickle.load(open(os.path.join(SAVE_DIR, f"score_res_n{args.n}_seed{args.seed}.pkl"), "rb"))
+    tau_res = pickle.load(open(os.path.join(SAVE_DIR, f"tau_n{args.n}_seed{args.seed}.pkl"), "rb"))
 
     print("start testing")
     bw = "med"
@@ -123,7 +131,7 @@ if __name__ == "__main__":
         )
 
     # 3. save results
-    filename = f"stats_seed{args.seed}.pkl"
+    filename = f"stats_n{args.n}_seed{args.seed}.pkl"
     pickle.dump(res, open(os.path.join(SAVE_DIR, filename), "wb"))
     print("Saved to", os.path.join(SAVE_DIR, filename))        
 

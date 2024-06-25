@@ -369,7 +369,7 @@ class PolyWeightFunction(WeightFunction):
         self.derivative_sup = 2. * self.b * self.a
 
     def __call__(self, X, score=None):
-        assert np.squeeze(X[0]).shape == np.squeeze(self.loc).shape
+        assert np.squeeze(self.loc).shape == () or np.squeeze(X[0]).shape == np.squeeze(self.loc).shape
 
         score_norm_sq = np.sum((X - self.loc)**2, -1) # n
         return jax.lax.pow(1 + score_norm_sq / self.a**2, -self.b) # n

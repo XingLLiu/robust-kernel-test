@@ -1,7 +1,6 @@
 import numpy as np
 import jax
 import jax.numpy as jnp
-import blackjax
 import pickle
 import os
 from tqdm import trange
