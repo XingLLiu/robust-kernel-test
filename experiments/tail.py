@@ -14,10 +14,15 @@ from pathlib import Path
 import argparse
 
 
-def t_pdf_multivariate(x, df, scale):
+def t_pdf_multivariate_single(x, df, scale):
     d = x.shape[-1]
     t_pdf = lambda j: jax.scipy.stats.t.pdf(x[j], df, scale=scale)
     return jnp.sum(jax.vmap(t_pdf)(jnp.arange(d, dtype=jnp.int32)))
+
+def t_pdf_multivariate(X, df):
+    scale = jnp.sqrt((df - 2) / df)
+    single_den = lambda x: t_pdf_multivariate_single(x, df, scale)
+    return jax.vmap(single_den)(X)
 
 def t_score_fn(X, df):
     scale = jnp.sqrt((df - 2) / df)
