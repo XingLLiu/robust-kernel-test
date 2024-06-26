@@ -92,7 +92,7 @@ if __name__ == "__main__":
 
             # find tau
             score_weight_fn = kernels.PolyWeightFunction(loc=jnp.zeros((args.dim,)))
-            kernel0 = kernels.RBF(med_heuristic=True, X=X, Y=X)
+            kernel0 = kernels.IMQ(med_heuristic=True, X=X, Y=X)
             kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
             ksd = metrics.KSD(kernel, score_fn=rbm_model.grad_log)
         

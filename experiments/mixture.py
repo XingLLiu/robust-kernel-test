@@ -77,7 +77,6 @@ if __name__ == "__main__":
     # dir_ls = np.array([[np.cos(a), np.sin(a)] for a in angles])
     # dir_ls = np.random.normal(size=(args.nmix, dim))
     # dir_ls = dir_ls / np.sum(dir_ls**2, axis=-1, keepdims=True)**0.5
-    print("dir_ls", dir_ls)
     
     model_ratio_ls = np.random.uniform(size=(args.nmix))
     model_ratio_ls = model_ratio_ls / np.sum(model_ratio_ls)
@@ -117,11 +116,10 @@ if __name__ == "__main__":
             score_res[scale] = scores
 
             # find tau
-            # tau = 1. #!
             X = Xs[0]
             a = np.percentile(jnp.sum(X**2, -1)**0.5, 50.0)
             score_weight_fn = kernels.PolyWeightFunction(a=a)
-            kernel0 = kernels.RBF(med_heuristic=True, X=X, Y=X)
+            kernel0 = kernels.IMQ(med_heuristic=True, X=X, Y=X)
             kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
             ksd = metrics.KSD(kernel, score_fn=score_fn)
         

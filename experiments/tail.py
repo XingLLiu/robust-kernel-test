@@ -74,7 +74,7 @@ if __name__ == "__main__":
             # find tau
             X = Xs[0]
             score_weight_fn = kernels.PolyWeightFunction()
-            kernel0 = kernels.RBF(med_heuristic=True, X=X, Y=X)
+            kernel0 = kernels.IMQ(med_heuristic=True, X=X, Y=X)
             kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
             ksd = metrics.KSD(kernel, score_fn=score_fn)
         

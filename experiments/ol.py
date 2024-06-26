@@ -42,18 +42,18 @@ if __name__ == "__main__":
     dim = 1
 
     # outliers
-    ol_ls = [1.] #!
-    # ol_ls = [0.1, 1., 10., 100.]
+    # ol_ls = [1.] #!
+    ol_ls = [0.1, 1., 10., 100.]
     ol_ls = [np.eye(dim)[0, :] * yy for yy in ol_ls]
 
-    eps_ls = [0., 0.01] #!
-    # eps_ls = [0., 0.01, 0.05, 0.075, 0.1, 0.125, 0.15, 0.2]
+    # eps_ls = [0., 0.01] #!
+    eps_ls = [0., 0.01, 0.05, 0.075, 0.1, 0.125, 0.15, 0.2]
     
     # 1. generate data
     mean_data = np.zeros((dim,)) # data
     score_fn = lambda x: - x # model
     
-    if args.gen == "True":
+    if args.gen:
         X_res = {}
         score_res = {}
         # hvp_res = {}
@@ -81,7 +81,7 @@ if __name__ == "__main__":
                 # find tau
                 X = Xs[0]
                 score_weight_fn = kernels.PolyWeightFunction()
-                kernel0 = kernels.RBF(med_heuristic=True, X=X, Y=X)
+                kernel0 = kernels.IMQ(med_heuristic=True, X=X, Y=X)
                 kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
                 ksd = metrics.KSD(kernel, score_fn=score_fn)
             
