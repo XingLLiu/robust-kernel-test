@@ -364,6 +364,9 @@ class KSD(Metric):
         self.tau = tau
         return tau
 
+    def compute_deviation_threshold(self, n, tau, alpha):
+        return np.sqrt(tau / n) + np.sqrt(- 2 * tau * (np.log(alpha)) / n)
+
     def test_threshold(
             self, n: int, eps0: float = None, theta: float = None, alpha: float = 0.05, method: str = "deviation",
             X: np.array = None, score=None, hvp=None, nboot: int = 500, return_pval: bool = False
@@ -389,7 +392,7 @@ class KSD(Metric):
             threshold = np.sqrt(tau / n) + np.sqrt(- 2 * tau * (np.log(alpha)) / n)
 
         elif method == "ball_robust":
-            gamma_n = np.sqrt(tau / n) + np.sqrt(- 2 * tau * (np.log(alpha)) / n)
+            gamma_n = self.compute_deviation_threshold(n, tau, alpha)
             threshold = theta + gamma_n
 
         elif method == "CLT":
@@ -418,15 +421,8 @@ class KSD(Metric):
             bootstrap = boot.WildBootstrap(self, ndraws=nboot)
             boot_stats_degen, vstat = bootstrap.compute_bootstrap(X, X, score=score, hvp=hvp, degen=True)
             boot_stats = np.concatenate([boot_stats_degen, np.array([vstat])])
-            # print("boot_stats", boot_stats.shape)
             boot_stats_nonsq = boot_stats**0.5
             threshold = np.percentile(boot_stats_nonsq, 100 * (1 - alpha))
-            # print("threshold_degen", threshold)
-            # print("vstat_nonsq", vstat**0.5)
-
-            # print("threshold", np.percentile(boot_stats, 100 * (1 - alpha)) + theta**2)
-            # print("threshold", (threshold + theta)**2, threshold**2 + theta**2)
-            # print("nonsq threshold", threshold + theta)
 
             if return_pval:
                 pval = np.mean(boot_stats_nonsq >= vstat**0.5)

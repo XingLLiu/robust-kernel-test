@@ -33,6 +33,7 @@ setup(
         "scipy",
         "matplotlib",
         "notebook>=7.0",
+        "ipywidgets==8.1.3",
         "scikit-learn",
         "tqdm",
         "seaborn",

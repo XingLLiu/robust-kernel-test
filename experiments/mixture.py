@@ -64,14 +64,20 @@ if __name__ == "__main__":
 
     args.bw = "med" if args.bw is None else args.bw
 
-    np.random.seed(2024)
+    np.random.seed(4321)
 
     dim = args.dim
+    std = 1.
 
-    std_ls = [.01, .1, .5, 1., 5.]
+    scale_ls = [1., 2., 3., 5., 10., 20.]
 
     # mixture means and ratios
-    mean_ls = np.random.uniform(low=-10., high=10., size=(args.nmix, dim))
+    dir_ls = np.random.uniform(-2., 2., size=(args.nmix, dim))
+    # angles = np.random.uniform(0., 2*np.pi, size=(args.nmix))
+    # dir_ls = np.array([[np.cos(a), np.sin(a)] for a in angles])
+    # dir_ls = np.random.normal(size=(args.nmix, dim))
+    # dir_ls = dir_ls / np.sum(dir_ls**2, axis=-1, keepdims=True)**0.5
+    print("dir_ls", dir_ls)
     
     model_ratio_ls = np.random.uniform(size=(args.nmix))
     model_ratio_ls = model_ratio_ls / np.sum(model_ratio_ls)
@@ -84,8 +90,16 @@ if __name__ == "__main__":
         X_res = {}
         score_res = {}
         tau_res = {}
+        means = {}
 
-        for std in tqdm(std_ls):
+        for scale in tqdm(scale_ls):
+            # create mean vectors 
+            # print("dir_ls", dir_ls)
+            mean_ls = dir_ls * scale
+            # print("mean_ls", mean_ls)
+            means[scale] = mean_ls
+
+            # define score function
             score_fn = make_score(mean_ls, model_ratio_ls, std)
 
             Xs = jnp.empty((args.nrep, args.n, dim), dtype=jnp.float32)
@@ -99,10 +113,11 @@ if __name__ == "__main__":
 
             assert Xs.shape == (args.nrep, args.n, dim)
 
-            X_res[std] = Xs
-            score_res[std] = scores
+            X_res[scale] = Xs
+            score_res[scale] = scores
 
             # find tau
+            # tau = 1. #!
             X = Xs[0]
             a = np.percentile(jnp.sum(X**2, -1)**0.5, 50.0)
             score_weight_fn = kernels.PolyWeightFunction(a=a)
@@ -112,7 +127,7 @@ if __name__ == "__main__":
         
             opt_res = parallel_optimize(Xs[0, :20], ksd, maxiter=500)
             tau = jnp.max(-opt_res)
-            tau_res[std] = tau
+            tau_res[scale] = tau
             print("tau", tau)
 
         # save data
@@ -120,7 +135,7 @@ if __name__ == "__main__":
         pickle.dump(score_res, open(os.path.join(SAVE_DIR, f"score_res_n{args.n}_d{dim}.pkl"), "wb"))
         pickle.dump(tau_res, open(os.path.join(SAVE_DIR, f"tau_d{dim}.pkl"), "wb"))
 
-        params_setup = {"means": mean_ls, "model_ratios": model_ratio_ls, "data_ratios": data_ratio_ls}
+        params_setup = {"means": means, "model_ratios": model_ratio_ls, "data_ratios": data_ratio_ls}
         pickle.dump(params_setup, open(os.path.join(SAVE_DIR, f"setup_d{dim}.pkl"), "wb"))
 
         print("Saved to", SAVE_DIR)
@@ -139,12 +154,12 @@ if __name__ == "__main__":
     # 2. run experiment
     res = {}
         
-    for std in std_ls:
-        tau = tau_res[std]
+    for scale in scale_ls:
+        tau = tau_res[scale]
         theta = eps0 * tau**0.5
 
-        res[std] = exp_utils.run_tests(
-            samples=X_res[std], scores=score_res[std], hvps=None, hvp_denom_sup=None,
+        res[scale] = exp_utils.run_tests(
+            samples=X_res[scale], scores=score_res[scale], hvps=None, hvp_denom_sup=None,
             theta=theta, bw="med", alpha=0.05, verbose=True,
         )
 

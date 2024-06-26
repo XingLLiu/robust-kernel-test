@@ -27,12 +27,13 @@ def change_theta(res, methods, theta):
     return res
 
 def run_tests(samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=None, alpha=0.05, verbose=False,
-              weight_fn_args=None, base_kernel="IMQ", run_ksdagg=False, ksdagg_bw=None):
+              weight_fn_args=None, base_kernel="IMQ", run_ksdagg=False, ksdagg_bw=None, run_dev=False, tau=None):
     res = {
         "standard": {"nonsq_stat": [], "stat": [], "u_stat": [], "pval": [], "rej": [], "boot_stats": []},
         "tilted": {"nonsq_stat": [], "stat": [], "u_stat": [], "pval": [], "rej": [], "boot_stats": []},
         "tilted_r_boot": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "pval": []},
         "tilted_r_bootmax": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "tau": []},
+        "tilted_r_dev": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "tau": []},
     }
     res["theta"] = theta
 
@@ -104,7 +105,7 @@ def run_tests(samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=N
         res["tilted"]["pval"].append(pval_standard)
         res["tilted"]["rej"].append(int(pval_standard < alpha))
         
-        # 7. bootstrap degen
+        # 3. bootstrap degen
         res["tilted_r_boot"]["stat"].append(vstat)
         res["tilted_r_boot"]["nonsq_stat"].append(nonsq_stat)
         res["tilted_r_boot"]["u_stat"].append(ustat)
@@ -114,7 +115,7 @@ def run_tests(samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=N
         res["tilted_r_boot"]["rej"].append(int(max(0, nonsq_stat - ksd.theta) > q_degen_nonsq))
         res["tilted_r_boot"]["pval"].append(thresh_res["pval_degen"])
 
-        # 6. bootstrap
+        # 4. bootstrap
         res["tilted_r_bootmax"]["stat"].append(vstat)
         res["tilted_r_bootmax"]["nonsq_stat"].append(nonsq_stat)
         res["tilted_r_bootmax"]["u_stat"].append(ustat)
@@ -124,6 +125,20 @@ def run_tests(samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=N
         res["tilted_r_bootmax"]["rej"].append(int(vstat > q_max + ksd.theta**2))
         res["tilted_r_bootmax"]["tau"].append(ksd.tau)
 
+        # 5. deviation
+        if run_dev:
+            assert tau is not None, "Must specify tau for deviation test"
+            dev_threshold = ksd.compute_deviation_threshold(n, tau, alpha)
+            res["tilted_r_dev"]["stat"].append(vstat)
+            res["tilted_r_dev"]["nonsq_stat"].append(nonsq_stat)
+            res["tilted_r_dev"]["u_stat"].append(ustat)
+            res["tilted_r_dev"]["threshold"].append(ksd.theta + dev_threshold)
+            res["tilted_r_dev"]["theta"].append(ksd.theta)
+            res["tilted_r_dev"]["gamma"].append(dev_threshold)
+            res["tilted_r_dev"]["rej"].append(int(max(0, nonsq_stat - ksd.theta) > dev_threshold))
+            res["tilted_r_dev"]["tau"].append(tau)
+
+        # 6. ksdagg
         if run_ksdagg:
             # rej_ksdagg = src_ksdagg.ksdagg(X, score, kernel=base_kernel_class, weight_fn=weight_fn)
             # rej_ksdagg, summary_ksdagg = src_ksdagg.ksdagg(X, score, kernel="imq", return_dictionary=True)
