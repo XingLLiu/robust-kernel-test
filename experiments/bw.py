@@ -5,8 +5,6 @@ import pickle
 import os
 from tqdm import tqdm
 
-import src.metrics as metrics
-import src.kernels as kernels
 import src.exp_utils as exp_utils
 import experiments.ol as exp_ol
 
@@ -59,7 +57,7 @@ if __name__ == "__main__":
             score_res[ol_key] = {}
         
             ol = np.eye(dim)[0, :] * ol
-                
+
             for eps in eps_ls:
                 Xs = np.random.multivariate_normal(mean_data, np.eye(dim), (args.nrep, args.n)) # nrep, n, 1
                 Xs = jax.vmap(lambda x: exp_ol.sample_outlier_contam(x, eps, ol))(Xs)

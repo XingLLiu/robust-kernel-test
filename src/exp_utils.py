@@ -5,24 +5,21 @@ import src.metrics as metrics
 import src.kernels as kernels
 import src.bootstrap as boot
 import src.ksdagg as src_ksdagg
-# import ksdagg
 
 
-def change_theta(res, methods, theta):
+def change_theta(res, methods, theta, tau=None):
     """Given a dictionary of results, change the theta value and the test outcome.
     """
     res["theta"] = theta
     for mm in methods:
         res[mm]["theta"] = [theta] * len(res[mm]["theta"])
 
-        # if mm == "tilted_robust_dev":
-        #     res[mm]["rej"] = [int(stat**0.5 > gam + theta) for stat, gam in zip(res[mm]["stat"], res[mm]["gamma"])]
-        # elif mm == "tilted_robust_clt":
-        #     res[mm]["rej"] = [int(stat > gam**2 + theta**2) for stat, gam in zip(res[mm]["stat"], res[mm]["gamma"])]
-        if mm == "tilted_r_boot":
+        if mm == "tilted_r_boot" or mm == "tilted_r_dev":
             res[mm]["rej"] = [int(max(0, stat**0.5 - theta) > gam) for stat, gam in zip(res[mm]["stat"], res[mm]["gamma"])]
         elif mm == "tilted_r_bootmax":
             res[mm]["rej"] = [int(stat > gam**2 + theta**2) for stat, gam in zip(res[mm]["stat"], res[mm]["gamma"])]
+        elif mm == "tilted_r_dev":
+            res[mm]["rej"] = [int(max(0, stat**0.5 - theta) > tau) for stat in res[mm]["stat"]]
     
     return res
 

@@ -183,6 +183,7 @@ class IMQ(object):
         """
         dnorm2 = l2norm(X, Y)
         med_heuristic_sq = median_heuristic(dnorm2)
+        print("med_heuristic_sq", med_heuristic_sq)
         self.sigma_sq = med_heuristic_sq
         
     def __call__(self, X, Y):

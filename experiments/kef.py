@@ -11,6 +11,7 @@ import src.metrics as metrics
 import src.kernels as kernels
 import src.exp_utils as exp_utils
 from experiments.efm import ExpFamilyModel, sample_outlier_contam
+from experiments.rbm import parallel_optimize
 
 from pathlib import Path
 import argparse
@@ -197,10 +198,9 @@ if __name__ == "__main__":
 
     if args.exp == "level":
         # level experiments
-        eps_ls = [0., 0.05, 0.1]
-        ol_mean_ls = [10., 15., 20., 30.]
-        # L = 25
-        L = 25 #!
+        eps_ls = [0., 0.05, 0.1, 0.2]
+        ol_mean_ls = [0., 1., 5., 10., 15., 20., 30.]
+        L = 25
         ol_std = 0.1
         ol_type = "normal"
 
@@ -215,17 +215,12 @@ if __name__ == "__main__":
 
     elif args.exp == "power2":
         # power experiments
-        L = 1
-        ol_mean = 0.
-        ol_std = .1
+        L = 25
         param_ls = [0., .5, 1., 2.]
 
     # other params
     kef_l = jnp.sqrt(2)
     kef_p0_std = 3.
-
-    # kef_l = jnp.sqrt(.5) #!
-    # kef_p0_std = 3. #!
 
     # generate split indices
     np.random.seed(args.seed)
@@ -253,26 +248,15 @@ if __name__ == "__main__":
                     for i in trange(args.nrep):
                     
                         # generate data
-                        if args.data == "galaxy":
-                            idx = idx_ls[i]
-                            X_train = galaxy_data[jnp.array([i for i in range(n) if i not in idx], dtype=jnp.int32)]
-                            # X_train = sample_outlier_contam(X_train, eps=eps, ol_mean=ol_mean, ol_std=ol_std)
-                            X_train = add_outlier(X_train, eps=eps, ol_mean=ol_mean, ol_std=ol_std)
+                        idx = idx_ls[i]
+                        X_train = galaxy_data[jnp.array([i for i in range(n) if i not in idx], dtype=jnp.int32)]
+                        # X_train = sample_outlier_contam(X_train, eps=eps, ol_mean=ol_mean, ol_std=ol_std)
+                        X_train = add_outlier(X_train, eps=eps, ol_mean=ol_mean, ol_std=ol_std)
 
-                            X_test = galaxy_data[idx]
-                            # X_test = sample_outlier_contam(X_test, eps=eps, ol_mean=ol_mean, ol_std=ol_std)
-                            X_test = add_outlier(X_test, eps=eps, ol_mean=ol_mean, ol_std=ol_std)
-                            Xtest_ls.append(X_test)
-
-                        elif args.data == "synthetic":
-                            # training data
-                            X_train = sample_from_mixture(n)
-                            X_train = sample_outlier_contam(X_train, eps=eps, ol_mean=ol_mean, ol_std=ol_std)
-
-                            # test data
-                            X_test = sample_from_mixture(ntest)
-                            X_test = sample_outlier_contam(X_test, eps=eps, ol_mean=ol_mean, ol_std=ol_std)
-                            Xtest_ls.append(X_test)
+                        X_test = galaxy_data[idx]
+                        # X_test = sample_outlier_contam(X_test, eps=eps, ol_mean=ol_mean, ol_std=ol_std)
+                        X_test = add_outlier(X_test, eps=eps, ol_mean=ol_mean, ol_std=ol_std)
+                        Xtest_ls.append(X_test)
 
                         # fit model
                         kef = KernelExpFamily(params=None, bw=kef_l, L=L, p0_loc=0., p0_scale=kef_p0_std)
@@ -300,26 +284,35 @@ if __name__ == "__main__":
                     score_res[eps][ol_mean] = jnp.stack(score_ls, 0)
                     est_params_res[eps][ol_mean] = jnp.stack(est_params_ls, 0)
 
-                    # find tau
-                    xx = jnp.linspace(-20., 20., 10001)
-                    # xx = jnp.concatenate(
-                    #     [jnp.linspace(-15., 0, 10001), jnp.linspace(15., 30, 10001)],
-                    #     0,
-                    # )
-                    xx = jnp.reshape(xx, (-1, 1))
-                    ss = jax.vmap(trained_kef_model.score)(xx)
+                    # # find tau
+                    # xx = jnp.linspace(-20., 20., 10001)
+                    # # xx = jnp.concatenate(
+                    # #     [jnp.linspace(-15., 0, 10001), jnp.linspace(15., 30, 10001)],
+                    # #     0,
+                    # # )
+                    # xx = jnp.reshape(xx, (-1, 1))
+                    # ss = jax.vmap(trained_kef_model.score)(xx)
 
-                    poly_weight_fn = kernels.PolyWeightFunction(a=1.)
-                    kernel0 = kernels.IMQ(sigma_sq=2*1.**2)
-                    test_kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=poly_weight_fn)
+                    # poly_weight_fn = kernels.PolyWeightFunction()
+                    # kernel0 = kernels.IMQ(sigma_sq=2*1.**2)
+                    # test_kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=poly_weight_fn)
 
-                    ksd = metrics.KSD(test_kernel)
-                    idx = jnp.arange(xx.shape[0])
-                    ksd_vals = jax.vmap(lambda i: compute_ksd(xx[i], ss[i], ksd))(idx)
+                    # ksd = metrics.KSD(test_kernel)
+                    # idx = jnp.arange(xx.shape[0])
+                    # ksd_vals = jax.vmap(lambda i: compute_ksd(xx[i], ss[i], ksd))(idx)
                     
-                    tau = jnp.max(ksd_vals)
+                    # tau = jnp.max(ksd_vals)
+                
+                    score_weight_fn = kernels.PolyWeightFunction()
+                    kernel0 = kernels.IMQ(sigma_sq=2*1.**2)
+                    kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
+                    ksd = metrics.KSD(kernel, score_fn=lambda X: jax.vmap(trained_kef_model.score)(X))
+                
+                    opt_res = parallel_optimize(Xtest_ls[0][:20], ksd, maxiter=500)
+                    tau = jnp.max(-opt_res)
+
                     tau_res[eps][ol_mean] = tau
-                    # print("tau", tau)
+                    print("tau", tau)
 
         elif args.exp == "power2":
             for param in param_ls:
@@ -330,18 +323,11 @@ if __name__ == "__main__":
                 for i in trange(args.nrep):
                 
                     # generate data
-                    # X_test = galaxy_data
-                    # Xtest_ls.append(X_test)
-
                     idx = idx_ls[i]
                     X_train = galaxy_data[jnp.array([i for i in range(n) if i not in idx], dtype=jnp.int32)]
 
                     X_test = galaxy_data[idx]
                     Xtest_ls.append(X_test)
-
-                    # fit model
-                    # est_params = jnp.array([param])
-                    # trained_kef_model = KernelExpFamily(est_params, bw=kef_l, L=L, p0_loc=0., p0_scale=kef_p0_std)
 
                     kef = KernelExpFamily(params=None, bw=kef_l, L=L, p0_loc=0., p0_scale=kef_p0_std)
 
@@ -369,25 +355,35 @@ if __name__ == "__main__":
                 score_res[param] = jnp.stack(score_ls, 0)
                 est_params_res[param] = jnp.stack(est_params_ls, 0)
 
-                # find tau
-                xx = jnp.linspace(-20., 20., 10001)
-                # xx = jnp.concatenate(
-                #     [jnp.linspace(-15., 0, 10001), jnp.linspace(15., 30, 10001)],
-                #     0,
-                # )
-                xx = jnp.reshape(xx, (-1, 1))
-                ss = jax.vmap(trained_kef_model.score)(xx)
+                # # find tau
+                # xx = jnp.linspace(-20., 20., 10001)
+                # # xx = jnp.concatenate(
+                # #     [jnp.linspace(-15., 0, 10001), jnp.linspace(15., 30, 10001)],
+                # #     0,
+                # # )
+                # xx = jnp.reshape(xx, (-1, 1))
+                # ss = jax.vmap(trained_kef_model.score)(xx)
 
-                poly_weight_fn = kernels.PolyWeightFunction(a=1.)
-                kernel0 = kernels.IMQ(sigma_sq=2*1.**2)
-                test_kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=poly_weight_fn)
+                # poly_weight_fn = kernels.PolyWeightFunction()
+                # kernel0 = kernels.IMQ(sigma_sq=2*1.**2)
+                # test_kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=poly_weight_fn)
 
-                ksd = metrics.KSD(test_kernel)
-                idx = jnp.arange(xx.shape[0])
-                ksd_vals = jax.vmap(lambda i: compute_ksd(xx[i], ss[i], ksd))(idx)
+                # ksd = metrics.KSD(test_kernel)
+                # idx = jnp.arange(xx.shape[0])
+                # ksd_vals = jax.vmap(lambda i: compute_ksd(xx[i], ss[i], ksd))(idx)
                 
-                tau = jnp.max(ksd_vals)
+                # tau = jnp.max(ksd_vals)
+
+                score_weight_fn = kernels.PolyWeightFunction()
+                kernel0 = kernels.IMQ(sigma_sq=2*1.**2)
+                kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
+                ksd = metrics.KSD(kernel, score_fn=lambda X: jax.vmap(trained_kef_model.score)(X))
+            
+                opt_res = parallel_optimize(Xtest_ls[0][:20], ksd, maxiter=500)
+                tau = jnp.max(-opt_res)
+
                 tau_res[param] = tau
+                print("tau", tau)
 
 
         # save data
@@ -405,7 +401,7 @@ if __name__ == "__main__":
     print("start testing")
     bw = 2.*1**2
     # bw = "med"
-    eps0 = .1
+    eps0 = .2
     res = {}
 
     if args.exp == "level" or args.exp == "power":
