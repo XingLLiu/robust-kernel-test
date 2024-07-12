@@ -17,13 +17,13 @@ class Bootstrap:
     def compute_bootstrap(self, X, Y):
         raise NotImplementedError
 
-    def pval(self, X, Y: jnp.array = None, return_boot: bool = False, return_stat: bool = False, score: jnp.ndarray = None, hvp: jnp.array = None):
+    def pval(self, X, Y: jnp.array = None, return_boot: bool = False, return_stat: bool = False, score: jnp.ndarray = None):
         """Compute the p-value for the KSD test.
 
         :param X: numpy array of shape (n, d)
         :param Y: numpy array of shape (m, d)
         """
-        boot_stats, test_stat = self.compute_bootstrap(X, Y, score=score, hvp=hvp)
+        boot_stats, test_stat = self.compute_bootstrap(X, Y, score=score)
         pval = (1. + jnp.sum(boot_stats > test_stat)) / (self.ndraws + 1)
         if not return_boot and not return_stat:
             return pval

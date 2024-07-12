@@ -347,7 +347,7 @@ class KSD(Metric):
 
     def test_threshold(
             self, n: int, eps0: float = None, theta: float = None, alpha: float = 0.05, method: str = "deviation",
-            X: jnp.array = None, score=None, hvp=None, nboot: int = 500, return_pval: bool = False,
+            X: jnp.array = None, score=None, nboot: int = 500, return_pval: bool = False,
             compute_tau: bool = True,
         ):
         """
@@ -376,8 +376,8 @@ class KSD(Metric):
 
         elif method == "boot":
             bootstrap = boot.WildBootstrap(self, ndraws=nboot)
-            boot_stats_nondegen, vstat = bootstrap.compute_bootstrap(X, X, score=score, hvp=hvp, degen=False)
-            boot_stats_degen, _ = bootstrap.compute_bootstrap(X, X, score=score, hvp=hvp, degen=True)
+            boot_stats_nondegen, vstat = bootstrap.compute_bootstrap(X, X, score=score, degen=False)
+            boot_stats_degen, _ = bootstrap.compute_bootstrap(X, X, score=score, degen=True)
             threshold_nondegen = jnp.percentile(boot_stats_nondegen - vstat, 100 * (1 - alpha))
             threshold_degen = jnp.percentile(boot_stats_degen, 100 * (1 - alpha))
             # print("threshold_degen", threshold_degen**0.5)
@@ -389,7 +389,7 @@ class KSD(Metric):
 
         elif method == "degen_boot":
             bootstrap = boot.WildBootstrap(self, ndraws=nboot)
-            boot_stats_degen, vstat = bootstrap.compute_bootstrap(X, X, score=score, hvp=hvp, degen=True)
+            boot_stats_degen, vstat = bootstrap.compute_bootstrap(X, X, score=score, degen=True)
             boot_stats = jnp.concatenate([boot_stats_degen, jnp.array([vstat])])
             boot_stats_nonsq = boot_stats**0.5
             threshold = jnp.percentile(boot_stats_nonsq, 100 * (1 - alpha))
@@ -399,10 +399,10 @@ class KSD(Metric):
 
         elif method == "boot_both":
             bootstrap = boot.WildBootstrap(self, ndraws=nboot)
-            boot_stats_nondegen, vstat = bootstrap.compute_bootstrap(X, X, score=score, hvp=hvp, degen=False)
+            boot_stats_nondegen, vstat = bootstrap.compute_bootstrap(X, X, score=score, degen=False)
             boot_stats_nondegen = jnp.concatenate([boot_stats_nondegen, jnp.array([vstat])])
             
-            boot_stats_degen, _ = bootstrap.compute_bootstrap(X, X, score=score, hvp=hvp, degen=True)
+            boot_stats_degen, _ = bootstrap.compute_bootstrap(X, X, score=score, degen=True)
             boot_stats_degen = jnp.concatenate([boot_stats_degen, jnp.array([vstat])])
 
             # compute tau and theta
