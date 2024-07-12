@@ -252,7 +252,6 @@ class KSD(Metric):
         self,
         kernel,
         score_fn: callable = None,
-        log_prob: callable = None,
     ):
         """
         Inputs:
@@ -262,7 +261,6 @@ class KSD(Metric):
         """
         self.k = kernel
         self.score_fn = score_fn
-        self.log_prob = log_prob
 
     def __call__(self, X: np.array, Y: np.array, **kwargs):
         return self.u_p(X, Y, **kwargs)
@@ -273,20 +271,12 @@ class KSD(Metric):
     def u_p(self, X: np.array, Y: np.array, output_dim: int = 1, vstat: bool = False, score: np.array = None, hvp: np.array = None):
         """
         Inputs:
-            X: (..., n, dim)
-            Y: (..., m, dim)
+            X: (n, dim)
+            Y: (m, dim)
         """
         # calculate scores using autodiff
         if self.score_fn is None and score is None:
             raise NotImplementedError("Either score_fn or the score values must provided.")
-        #   with tf.GradientTape() as g:
-        #     g.watch(X_cp)
-        #     log_prob_X = self.log_prob(X_cp)
-        #   score_X = g.gradient(log_prob_X, X_cp) # n x dim
-        #   with tf.GradientTape() as g:
-        #     g.watch(Y_cp)
-        #     log_prob_Y = self.log_prob(Y_cp) # m x dim
-        #   score_Y = g.gradient(log_prob_Y, Y_cp)
         elif score is not None:
             assert score.shape == X.shape
             score_X = score
@@ -301,17 +291,10 @@ class KSD(Metric):
             self.k.bandwidth(X, Y)
 
         # kernel
-        if isinstance(self.k, kernels.TiltedKernel):
-            K_XY = self.k(X, Y, score_X=score_X, score_Y=score_Y) # n x m
-            grad_K_Y = self.k.grad_second(X, Y, score_X=score_X, score_Y=score_Y, hvp_Y=hvp) # n x m x dim
-            grad_K_X = self.k.grad_first(X, Y, score_X=score_X, score_Y=score_Y, hvp_X=hvp) # n x m x dim
-            gradgrad_K = self.k.gradgrad(X, Y, score_X=score_X, score_Y=score_Y, hvp_X=hvp, hvp_Y=hvp) # n x m
-
-        else:
-            K_XY = self.k(X, Y) # n x m
-            grad_K_Y = self.k.grad_second(X, Y) # n x m x dim
-            grad_K_X = self.k.grad_first(X, Y) # n x m x dim
-            gradgrad_K = self.k.gradgrad(X, Y) # n x m
+        K_XY = self.k(X, Y) # n x m
+        grad_K_Y = self.k.grad_second(X, Y) # n x m x dim
+        grad_K_X = self.k.grad_first(X, Y) # n x m x dim
+        gradgrad_K = self.k.gradgrad(X, Y) # n x m
 
         # term 1
         term1_mat = np.matmul(score_X, np.moveaxis(score_Y, (-1, -2), (-2, -1))) * K_XY # n x m
@@ -333,12 +316,8 @@ class KSD(Metric):
 
         u_p = term1_mat + term2_mat + term3_mat + term4_mat
 
-        # for ii, mat in enumerate([term1_mat, term2_mat, term3_mat, term4_mat]):
-        #     print(f"term {ii+1}:", np.mean(mat))
-
         if not vstat:
             # extract diagonal
-            # np.fill_diagonal(u_p, 0.) #TODO make this batchable
             u_p = u_p.at[np.diag_indices(u_p.shape[0])].set(0.)
             denom = (X.shape[-2] * (Y.shape[-2]-1))
         else:
