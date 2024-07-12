@@ -79,6 +79,13 @@ class RBF(Kernel):
     """
 
     def __init__(self, sigma_sq=None, med_heuristic=False, scale=1., X=None, Y=None):
+        """
+        :param sigma_sq: float, squared bandwidth parameter \sigma^2
+        :param med_heuristic: bool, whether to use median heuristic for bandwidth. If True,
+            X, Y must be provided to compute the median heuristic.
+        :param X: jnp.array of shape (..., n, dim)
+        :param Y: jnp.array of shape (..., m, dim)
+        """
         super().__init__()
         self.sigma_sq = sigma_sq
         self.med_heuristic = med_heuristic
@@ -87,17 +94,6 @@ class RBF(Kernel):
         if med_heuristic:
             assert X is not None and Y is not None, "Need to provide X, Y for med heuristic"
             self.bandwidth(X, Y)
-
-        inv_bw = 1 / jnp.sqrt(self.sigma_sq / 2.)
-        self.sup = 1.
-        self.grad_first_sup = inv_bw * jnp.exp(-0.5)
-        self.grad_second_sup = self.grad_first_sup
-        self.gradgrad_sup = 1 / (self.sigma_sq / 2. )
-
-    def UB(self):
-        """Compute sup_x k(x, x)
-        """
-        return self.scale
 
     def bandwidth(self, X, Y):
         """Compute med heuristic for bandwidth
@@ -139,18 +135,18 @@ class RBF(Kernel):
         gradgrad_tr = (term1 + term2) * K # n x m
         return self.scale * gradgrad_tr
 
-    def eval_zero(self):
-        x = jnp.zeros((1, 1))
-        k_zero = jnp.squeeze(self(x, x))
-        gradgrad_zero = jnp.squeeze(self.gradgrad(x, x))
-        return jnp.abs(k_zero), jnp.abs(gradgrad_zero)
-
-
 class IMQ(Kernel):
     """IMQ kernel k(x, y) = (1 + \|x - y\|_2^2 / \sigma^2)^\beta
     """
 
     def __init__(self, sigma_sq=None, beta=-0.5, med_heuristic=False, X=None, Y=None):
+        """
+        :param sigma_sq: float, squared bandwidth parameter \sigma^2
+        :param med_heuristic: bool, whether to use median heuristic for bandwidth. If True,
+            X, Y must be provided to compute the median heuristic.
+        :param X: jnp.array of shape (..., n, dim)
+        :param Y: jnp.array of shape (..., m, dim)
+        """
         super().__init__()
         self.sigma_sq = sigma_sq
         self.beta = beta
@@ -159,19 +155,6 @@ class IMQ(Kernel):
         if med_heuristic:
             assert X is not None and Y is not None, "Need to provide X, Y for med heuristic"
             self.bandwidth(X, Y)
-
-        inv_bw = 1 / jnp.sqrt(self.sigma_sq / 2.)
-        self.sup = 1.
-        assert self.beta == -0.5
-        uu = (self.sigma_sq / 3)**0.5
-        self.grad_first_sup = 1 / self.sigma_sq * uu * (1 + 1 / self.sigma_sq * uu**2)**(-3/2)
-        self.grad_second_sup = self.grad_first_sup
-        self.gradgrad_sup = 1 / (self.sigma_sq / 2. ) #TODO this is wrong, but we're not using it anyway
-
-    def UB(self):
-        """Compute sup_x k(x, x)
-        """
-        return 1.
     
     def bandwidth(self, X, Y):
         """Compute med heuristic for bandwidth
@@ -213,14 +196,6 @@ class IMQ(Kernel):
         ) * jax.lax.pow(K, self.beta-2) # n x m
 
         return gradgrad_tr
-
-    def eval_zero(self):
-        """Evaluate k and gradgrad k at (x, x)
-        """
-        x = jnp.zeros((1, 1))
-        k_zero = jnp.squeeze(self(x, x))
-        gradgrad_zero = jnp.squeeze(self.gradgrad(x, x))
-        return jnp.abs(k_zero), jnp.abs(gradgrad_zero)
 
 class TiltedKernel(Kernel):
     """Tilted kernel k(x, y) = w(x) k_0(x, y) w(y)
@@ -300,6 +275,7 @@ class SumKernel(Kernel):
         """
         :param kernels: list of Kernel objects
         """
+        super().__init__()
         self.kernels = kernels
 
     def __call__(self, X, Y):

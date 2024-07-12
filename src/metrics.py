@@ -247,16 +247,17 @@ class MMD(Metric):
         return boot
 
 class KSD(Metric):
+    """Class for Kernel Stein Discrepancy.
+    """
     def __init__(
         self,
         kernel,
         score_fn: callable = None,
     ):
         """
-        Inputs:
-            target (tfp.distributions.Distribution): Only require the log_probability of the target distribution e.g. unnormalised posterior distribution
-            kernel (tf.nn.Module): [description]
-            optimizer (tf.optim.Optimizer): [description]
+        :param kernel: A kernels.Kernel object
+        :param score_fn: Optional. A callable function that computes the score function.
+            If not give, scores must be provided when calling the class to evaluate the KSD.
         """
         self.k = kernel
         self.score_fn = score_fn
@@ -264,14 +265,17 @@ class KSD(Metric):
     def __call__(self, X: jnp.array, Y: jnp.array, **kwargs):
         return self.u_p(X, Y, **kwargs)
 
-    def vstat(self, X: jnp.array, Y: jnp.array, output_dim: int = 2, score: jnp.array = None, hvp: jnp.array = None):
-        return self.u_p(X, Y, output_dim=output_dim, vstat=True, score=score, hvp=hvp)
+    def vstat(self, X: jnp.array, Y: jnp.array, output_dim: int = 2, score: jnp.array = None):
+        return self.u_p(X, Y, output_dim=output_dim, vstat=True, score=score)
 
-    def u_p(self, X: jnp.array, Y: jnp.array, output_dim: int = 1, vstat: bool = False, score: jnp.array = None, hvp: jnp.array = None):
-        """
-        Inputs:
-            X: (n, dim)
-            Y: (m, dim)
+    def u_p(self, X: jnp.array, Y: jnp.array, output_dim: int = 1, vstat: bool = False, score: jnp.array = None):
+        """Compute the KSD
+
+        :param X: jnp.array of shape (n, dim)
+        :param Y: jnp.array of shape (m, dim)
+        :param output_dim: int, 1 or 2. If 1, then the KSD estimate is returned. If 2, then the Gram matrix
+            of shape (n, m) is returned.
+        :param vstat: bool. If True, the V-statistic is returned. Otherwise the U-statistic is returned.
         """
         # calculate scores using autodiff
         if self.score_fn is None and score is None:
@@ -329,19 +333,6 @@ class KSD(Metric):
         elif output_dim == 2:
             return u_p
 
-    def compute_tau(self):
-        h_zero, gradgrad_h_zero = self.k.base_kernel.eval_zero()
-        ws_sup = self.k.weight_fn.weighted_score_sup
-        m_sup = self.k.weight_fn.sup
-        grad_m_sup = self.k.weight_fn.derivative_sup
-        tau1 = (ws_sup**2 + 2 * ws_sup * grad_m_sup + grad_m_sup**2) * h_zero + m_sup**2 * gradgrad_h_zero
-
-        tau2 = (ws_sup + max([grad_m_sup**2, m_sup**2 * gradgrad_h_zero])**0.5)**2
-
-        tau = min([tau1, tau2])
-        self.tau = tau
-        return tau
-
     def compute_deviation_threshold(self, n, tau, alpha):
         return jnp.sqrt(tau / n) + jnp.sqrt(- 2 * tau * (jnp.log(alpha)) / n)
 
@@ -353,10 +344,10 @@ class KSD(Metric):
         """
         Compute the threshold for the robust test. Threshold = \gamma + \theta.
         """
-        tau = self.compute_tau()
 
         # set theta
         if theta == "ol":
+            assert tau is not None
             assert eps0 is not None
             theta = eps0 * tau**0.5
         
