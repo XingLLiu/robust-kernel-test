@@ -4,6 +4,7 @@ import jax
 import pickle
 import os
 from tqdm import tqdm
+import lqrt
 
 import src.metrics as metrics
 import src.kernels as kernels
@@ -15,12 +16,23 @@ from pathlib import Path
 import argparse
 
 
-def sample_outlier_contam(X: jnp.ndarray, eps: float, ol: jnp.ndarray):
-    n = X.shape[0]
-    ncontam = int(n * eps)
-    idx = np.random.choice(range(n), size=ncontam, replace=False) # ncontam
-    X = X.at[idx].set(ol)
-    return X
+# def sample_outlier_contam(X: jnp.ndarray, eps: float, ol: jnp.ndarray):
+#     n = X.shape[0]
+#     ncontam = int(n * eps)
+#     idx = np.random.choice(range(n), size=ncontam, replace=False) # ncontam
+#     X = X.at[idx].set(ol)
+#     return X
+
+def run_Lq_test(Xs, model_mean, alpha):
+    Xs = jnp.squeeze(Xs, -1)
+
+    pvals = []
+    for x in tqdm(Xs, desc="Lq test"):
+        pvals.append(lqrt.lqrtest_1samp(x, model_mean)[1])
+
+    pvals = jnp.array(pvals)
+    res = {"rej": (pvals <= alpha).astype(jnp.int32), "pval": pvals}
+    return res
 
 
 SAVE_DIR = "data/ol"
@@ -32,8 +44,9 @@ if __name__ == "__main__":
     parser.add_argument("--dim", type=int, default=1)
     parser.add_argument("--nrep", type=int)
     parser.add_argument("--bw", type=float, default=None)
-    parser.add_argument("--gen", type=bool, default=True)
+    parser.add_argument("--gen", type=bool, default=False)
     parser.add_argument("--run_ksdagg", type=bool, default=False)
+    parser.add_argument("--run_lq", type=bool, default=False)
     args = parser.parse_args()
 
     args.bw = "med" if args.bw is None else args.bw
@@ -45,35 +58,43 @@ if __name__ == "__main__":
 
     # outliers
     # ol_ls = [1.] #!
-    ol_ls = [0.1, 1., 10., 100.]
+    ol_ls = [0.1, 1., 10.]
     ol_ls = [np.eye(dim)[0, :] * yy for yy in ol_ls]
 
     # eps_ls = [0., 0.01] #!
-    eps_ls = [0., 0.01, 0.05, 0.075, 0.1, 0.125, 0.15, 0.2, 0.4, 0.6, 0.8, 1.]
+    eps_ls = [0., 0.01, 0.05, 0.075, 0.1, 0.125, 0.15, 0.2, 0.4]
     
     # 1. generate data
     mean_data = np.zeros((dim,)) # data
     score_fn = lambda x: - x # model
     
-    if args.gen:
+    if args.gen == True:
         X_res = {}
+        X_model_res = {}
         score_res = {}
         # hvp_res = {}
         tau_res = {}
         for ol in tqdm(ol_ls):
             ol_key = float(ol[0])
             X_res[ol_key] = {}
+            X_model_res[ol_key] = {}
             score_res[ol_key] = {}
             # hvp_res[ol_key] = {}
             tau_res[ol_key] = {}
             
             for eps in eps_ls:
                 Xs = np.random.multivariate_normal(mean_data, np.eye(dim), (args.nrep, args.n)) # nrep, n, 1
+                # ol_mean = np.eye(args.dim)[0] * ol
+                ol_mean = np.ones(args.dim)[0] * ol
                 # Xs = jax.vmap(lambda x: sample_outlier_contam(x, eps, ol))(Xs)
-                Xs = jax.vmap(lambda x: exp_efm.sample_outlier_contam(x, eps=eps, ol_mean=np.eye(args.dim)[0]*ol, ol_std=0.1))(Xs)
+                # Xs = jax.vmap(lambda x: exp_efm.sample_outlier_contam(x, eps=eps, ol_mean=ol_mean, ol_std=0.1))(Xs)
+                Xs = jax.vmap(lambda x: exp_efm.sample_outlier_contam(x, eps=eps, ol_mean=ol_mean, ol_std=0.))(Xs)
                 assert Xs.shape == (args.nrep, args.n, dim)
 
                 X_res[ol_key][eps] = Xs
+                
+                Xs_model = np.random.multivariate_normal(mean_data, np.eye(dim), (args.nrep, args.n)) # nrep, n, 1
+                X_model_res[ol_key][eps] = Xs_model
 
                 scores = score_fn(Xs) # nrep, n, 1
                 score_res[ol_key][eps] = scores
@@ -81,36 +102,33 @@ if __name__ == "__main__":
                 # hvps = - scores # nrep, n, 1
                 # hvp_res[ol_key][eps] = hvps
 
-                # find tau
-                X = Xs[0]
-                score_weight_fn = kernels.PolyWeightFunction()
-                kernel0 = kernels.IMQ(med_heuristic=True, X=X, Y=X)
-                kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
-                ksd = metrics.KSD(kernel, score_fn=score_fn)
+                # # find tau
+                # X = Xs[0]
+                # score_weight_fn = kernels.PolyWeightFunction()
+                # kernel0 = kernels.IMQ(med_heuristic=True, X=X, Y=X)
+                # kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
+                # ksd = metrics.KSD(kernel, score_fn=score_fn)
             
-                opt_res = parallel_optimize(Xs[0, :20], ksd, maxiter=500)
-                tau = jnp.max(-opt_res)
-                tau_res[ol_key][eps] = tau
-                print("tau", tau)
+                # opt_res = parallel_optimize(Xs[0, :20], ksd, maxiter=500)
+                # tau = jnp.max(-opt_res)
+                # tau_res[ol_key][eps] = tau
+                # print("tau", tau)
 
 
         # save data
         pickle.dump(X_res, open(os.path.join(SAVE_DIR, f"X_res_n{args.n}_d{dim}.pkl"), "wb"))
+        pickle.dump(X_model_res, open(os.path.join(SAVE_DIR, f"X_model_res_n{args.n}_d{dim}.pkl"), "wb"))
         pickle.dump(score_res, open(os.path.join(SAVE_DIR, f"score_res_n{args.n}_d{dim}.pkl"), "wb"))
         # pickle.dump(hvp_res, open(os.path.join(SAVE_DIR, f"ol_hvp_res_n{args.n}_d{dim}.pkl"), "wb"))
-        pickle.dump(tau_res, open(os.path.join(SAVE_DIR, f"tau_d{dim}.pkl"), "wb"))
+        # pickle.dump(tau_res, open(os.path.join(SAVE_DIR, f"tau_d{dim}.pkl"), "wb"))
         print("Saved to", SAVE_DIR)
 
     else:
         X_res = pickle.load(open(os.path.join(SAVE_DIR, f"X_res_n{args.n}_d{dim}.pkl"), "rb"))
+        X_model_res = pickle.load(open(os.path.join(SAVE_DIR, f"X_model_res_n{args.n}_d{dim}.pkl"), "rb"))
         score_res = pickle.load(open(os.path.join(SAVE_DIR, f"score_res_n{args.n}_d{dim}.pkl"), "rb"))
         # hvp_res = pickle.load(open(os.path.join(SAVE_DIR, f"ol_hvp_res_n500_d{dim}.pkl"), "rb"))
-        tau_res = pickle.load(open(os.path.join(SAVE_DIR, f"tau_d{dim}.pkl"), "rb"))
-
-        # X_res = {kk: xx[:, :args.n, :] for kk, xx in X_res.items()}
-        # score_res = {kk: xx[:, :args.n, :] for kk, xx in score_res.items()}
-        # hvp_res = {kk: xx[:, :args.n, :] for kk, xx in hvp_res.items()}
-
+        # tau_res = pickle.load(open(os.path.join(SAVE_DIR, f"tau_d{dim}.pkl"), "rb"))
 
     eps0 = 0.05 # max eps ratio
 
@@ -121,19 +139,29 @@ if __name__ == "__main__":
         
         res_ms[ol] = {}
         for eps in eps_ls:
-            tau = tau_res[ol][eps]
-            theta = eps0 * tau**0.5
+            # tau = tau_res[ol][eps]
+            # theta = eps0 * tau**0.5
 
-            res_ms[ol][eps] = exp_utils.run_tests(
-                samples=X_res[ol][eps], scores=score_res[ol][eps], 
-                hvps=None, hvp_denom_sup=None, 
-                theta=theta, bw="med", alpha=0.05, verbose=True,
-                run_ksdagg=bool(args.run_ksdagg),
-                run_dev=True, tau=tau,
-            )
+            if args.run_lq == False:
+                suffix = ""
+                res_ms[ol][eps] = exp_utils.run_tests(
+                    samples=X_res[ol][eps], scores=score_res[ol][eps], 
+                    hvps=None, hvp_denom_sup=None, 
+                    # theta=theta, tau=tau,
+                    bw="med", alpha=0.05, verbose=True,
+                    run_ksdagg=bool(args.run_ksdagg),
+                    run_dev=True, 
+                    run_dcmmd=True, samples_p=X_model_res[ol][eps], eps0=eps0,
+                    run_devmmd=True,
+                    compute_tau=True,
+                )
+            
+            else:
+                suffix = "_lq"
+                res_ms[ol][eps] = run_Lq_test(X_res[ol][eps], model_mean=0., alpha=0.05)
 
     # 3. save results
-    filename = f"stats_n{args.n}_d{dim}.pkl"
+    filename = f"stats{suffix}_n{args.n}_d{dim}.pkl"
 
     pickle.dump(res_ms, open(os.path.join(SAVE_DIR, filename), "wb"))
     print("Saved to", os.path.join(SAVE_DIR, filename))

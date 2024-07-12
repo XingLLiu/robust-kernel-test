@@ -369,7 +369,8 @@ class KSD(Metric):
 
     def test_threshold(
             self, n: int, eps0: float = None, theta: float = None, alpha: float = 0.05, method: str = "deviation",
-            X: np.array = None, score=None, hvp=None, nboot: int = 500, return_pval: bool = False
+            X: np.array = None, score=None, hvp=None, nboot: int = 500, return_pval: bool = False,
+            compute_tau: bool = True,
         ):
         """
         Compute the threshold for the robust test. Threshold = \gamma + \theta.
@@ -435,6 +436,14 @@ class KSD(Metric):
             boot_stats_degen, _ = bootstrap.compute_bootstrap(X, X, score=score, hvp=hvp, degen=True)
             boot_stats_degen = np.concatenate([boot_stats_degen, np.array([vstat])])
 
+            # compute tau and theta
+            if compute_tau:
+                assert eps0 is not None
+                tau = np.max(bootstrap.gram_mat)
+                theta = eps0 * tau**0.5
+                self.theta = theta
+                self.tau = tau
+
             # p-value for standard test
             pval_standard = np.mean(boot_stats_degen >= vstat)
 
@@ -453,7 +462,9 @@ class KSD(Metric):
             q_degen_nonsq = np.percentile(boot_stats_nonsq, 100 * (1 - alpha))
             pval_degen = np.mean(boot_stats_nonsq >= vstat**0.5 - self.theta)
 
-            res = {"q_max": q_max, "q_degen_nonsq": q_degen_nonsq, "pval_standard": pval_standard, "vstat": vstat, "pval_degen": pval_degen}
+            res = {"q_max": q_max, "q_degen_nonsq": q_degen_nonsq, "pval_standard": pval_standard, 
+                   "vstat": vstat, "pval_degen": pval_degen, "gram_mat": bootstrap.gram_mat,
+                   "theta": theta, "tau": tau,}
 
             return res
 

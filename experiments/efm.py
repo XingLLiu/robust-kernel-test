@@ -202,7 +202,10 @@ def compute_hvp(f, x, v):
 def sample_outlier_contam(X: jnp.ndarray, eps: float, ol_mean: float, ol_std: float):
     n, d = X.shape[0], X.shape[1]
     ncontam = int(n * eps)
-    outliers = np.random.multivariate_normal(mean=ol_mean, cov=np.eye(d)*ol_std, size=ncontam)
+    if ol_std > 0:
+        outliers = np.random.multivariate_normal(mean=ol_mean, cov=np.eye(d)*ol_std, size=ncontam)
+    else:
+        outliers = ol_mean
     idx = np.random.choice(range(n), size=ncontam, replace=False) # ncontam
     X = X.at[idx].set(outliers)
     return X

@@ -65,6 +65,7 @@ class WildBootstrap(Bootstrap):
 
         # compute test stat
         vstat = self.divergence.vstat(X, Y, score=score, hvp=hvp) # n, n
+        self.gram_mat = vstat
         test_stat = np.sum(vstat) / (n**2)
         
         # compute bootstrap stats
