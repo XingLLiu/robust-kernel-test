@@ -1,5 +1,5 @@
-import numpy as np
 import jax.numpy as jnp
+from numpy.random import multinomial
 
 
 class Bootstrap:
@@ -65,9 +65,9 @@ class WildBootstrap(Bootstrap):
         if degen:
             # r = np.random.choice([-1, 1], size=(self.ndraws, n)) # b, n
             # r = r - jnp.mean(r, -1, keepdims=True) # b, n
-            r = np.random.multinomial(n, pvals=[1/n]*n, size=self.ndraws) - 1 # b, n
+            r = multinomial(n, pvals=[1/n]*n, size=self.ndraws) - 1 # b, n
         else:
-            r = np.random.multinomial(n, pvals=[1/n]*n, size=self.ndraws) # b, n
+            r = multinomial(n, pvals=[1/n]*n, size=self.ndraws) # b, n
 
         # compute test stat
         vstat = self.divergence.vstat(X, Y, score=score) # n, n
