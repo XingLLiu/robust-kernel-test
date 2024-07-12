@@ -6,8 +6,8 @@ class Bootstrap:
 
     def __init__(self, divergence, ndraws: int = 1000):
         """
-        @param mmd: MMD object
-        @param ndraws: number of bootstrap draws
+        :param mmd: MMD object
+        :param ndraws: number of bootstrap draws
         """
         self.divergence = divergence
         self.ndraws = ndraws
@@ -19,8 +19,8 @@ class Bootstrap:
         """
         Compute the p-value for the MMD test.
 
-        @param X: numpy array of shape (n, d)
-        @param Y: numpy array of shape (m, d)
+        :param X: numpy array of shape (n, d)
+        :param Y: numpy array of shape (m, d)
         """
         boot_stats, test_stat = self.compute_bootstrap(X, Y, score=score, hvp=hvp)
         pval = (1. + jnp.sum(boot_stats > test_stat)) / (self.ndraws + 1)
@@ -38,8 +38,8 @@ class WildBootstrap(Bootstrap):
 
     def __init__(self, divergence, ndraws: int = 1000):
         """
-        @param mmd: MMD object
-        @param ndraws: number of bootstrap draws
+        :param mmd: MMD object
+        :param ndraws: number of bootstrap draws
         """
         self.divergence = divergence
         self.ndraws = ndraws
@@ -48,8 +48,8 @@ class WildBootstrap(Bootstrap):
         """
         Compute the threshold for the MMD test.
 
-        @param X: numpy array of shape (n, d)
-        @param Y: numpy array of shape (m, d)
+        :param X: numpy array of shape (n, d)
+        :param Y: numpy array of shape (m, d)
         """
         assert X.shape[-2] == Y.shape[-2], "X and Y must have the same sample size."
         
@@ -77,8 +77,8 @@ class RobustMMDTest(object):
 
     def __init__(self, mmd, eps0: float, ndraws: int = 1000):
         """
-        @param mmd: MMD object
-        @param ndraws: number of bootstrap draws
+        :param mmd: MMD object
+        :param ndraws: number of bootstrap draws
         """
         self.mmd = mmd
         self.ndraws = ndraws
@@ -111,8 +111,8 @@ class EfronBootstrap(Bootstrap):
 
     def __init__(self, divergence, nboot: int = 1000):
         """
-        @param mmd: MMD object
-        @param nboot: number of bootstrap draws
+        :param mmd: MMD object
+        :param nboot: number of bootstrap draws
         """
         self.divergence = divergence
         self.nboot = nboot
@@ -121,8 +121,8 @@ class EfronBootstrap(Bootstrap):
         """
         Compute the threshold for the MMD test.
 
-        @param X: numpy array of shape (n, d)
-        @param Y: numpy array of shape (m, d). If not, one-sample testing is used.
+        :param X: numpy array of shape (n, d)
+        :param Y: numpy array of shape (m, d). If not, one-sample testing is used.
         """
         assert len(X.shape) == 2, "X cannot be batched."
         n = X.shape[-2]
@@ -141,8 +141,8 @@ class EfronBootstrap(Bootstrap):
         """
         Compute the threshold for the MMD test.
 
-        @param X: numpy array of shape (n, d)
-        @param Y: numpy array of shape (m, d). If not, one-sample testing is used.
+        :param X: numpy array of shape (n, d)
+        :param Y: numpy array of shape (m, d). If not, one-sample testing is used.
         """
         assert len(X.shape) == 2, "X cannot be batched."
         n = X.shape[-2]

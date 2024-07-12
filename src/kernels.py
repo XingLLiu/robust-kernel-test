@@ -17,34 +17,65 @@ def l2norm(X, Y):
     dnorm2 = -2 * XY + XX + YY
     return dnorm2
 
-
 def median_heuristic(dnorm2):
-    """Compute median heuristic.
-    Args:
-        dnorm2: (n x n) tensor of \|X - Y\|_2^2
-    Return:
-        med(\|X_i - Y_j\|_2^2, 1 \leq i < j \leq n)
+    """Compute median heuristic med(\|X_i - X_j\|_2^2, 1 \leq i < j \leq n).
+    
+    :param dnorm2: (n, n) tensor of \|X - Y\|_2^2
     """
     ind_array = jnp.triu(jnp.ones_like(dnorm2), k=1) == 1
     med_heuristic = jnp.percentile(dnorm2[ind_array], 50.0)
     return med_heuristic
 
-
-def bandwidth(X, Y):
-    """Compute magic bandwidth
-    """
-    dnorm2 = l2norm(X, Y)
-    med_heuristic_sq = median_heuristic(dnorm2)
-    sigma2 = med_heuristic_sq / jnp.log(X.shape[-2])
-    return jnp.sqrt(sigma2)
-
-
-class RBF(object):
+class Kernel(object):
     """A kernel class need to have the following methods:
-        __call__: kernel evaluation k(x, y)
-        grad_first: grad_x k(x, y)
-        grad_second: grad_y k(x, y)
-        gradgrad: grad_x grad_y k(x, y)
+        __call__: k(x, y)
+        grad_first: \nabla_x k(x, y)
+        grad_second: \nabla_y k(x, y)
+        gradgrad: \nabla_x \nabla_y k(x, y)
+    """
+
+    def __call__(self, X, Y):
+        """Compute k(x, y)
+
+        :param X: jnp.array of shape (..., n, dim)
+        :param Y: jnp.array of shape (..., m, dim)
+        
+        :return jnp.array of shape (..., n, m)
+        """
+        raise NotImplementedError
+    
+    def grad_first(self, X, Y):
+        """Compute \nabla_x k(x, y) wrt the first argument.
+        
+        :param X: jnp.array of shape (..., n, dim)
+        :param Y: jnp.array of shape (..., m, dim)
+
+        :return jnp.array of shape (..., n, m, dim)
+        """
+        raise NotImplementedError
+
+    def grad_second(self, X, Y):
+        """Compute \nabla_x k(x, y) wrt the first argument.
+
+        :param X: jnp.array of shape (..., n, dim)
+        :param Y: jnp.array of shape (..., m, dim)
+        
+        :return jnp.array of shape (..., n, m, dim)
+        """
+        raise NotImplementedError
+
+    def gradgrad(self, X, Y):
+        """Compute \nabla_x^\top \nabla_y k(x, y).
+
+        :param X: jnp.array of shape (..., n, dim)
+        :param Y: jnp.array of shape (..., m, dim)
+        
+        :return jnp.array of shape (..., n, m)
+        """
+        raise NotImplementedError
+
+class RBF(Kernel):
+    """RBF kernel k(x, y) = exp(-\|x - y\|_2^2 / \sigma^2)
     """
 
     def __init__(self, sigma_sq=None, med_heuristic=False, scale=1., X=None, Y=None):
@@ -69,7 +100,7 @@ class RBF(object):
         return self.scale
 
     def bandwidth(self, X, Y):
-        """Compute magic bandwidth
+        """Compute med heuristic for bandwidth
         """
         dnorm2 = l2norm(X, Y)
         med_heuristic_sq = median_heuristic(dnorm2)
@@ -77,13 +108,6 @@ class RBF(object):
         self.sigma_sq = sigma2
     
     def __call__(self, X, Y):
-        """
-        Args:
-            Xr: tf.Tensor of shape (..., n, dim)
-            Yr: tf.Tensor of shape (..., m, dim)
-        Output:
-            tf.Tensor of shape (..., n, m)
-        """
         dnorm2 = l2norm(X, Y)
         sigma2_inv = 1.0 / (self.sigma_sq + 1e-12)
         sigma2_inv = jnp.expand_dims(jnp.expand_dims(sigma2_inv, -1), -1)
@@ -92,18 +116,9 @@ class RBF(object):
         return self.scale * K_XY
 
     def grad_first(self, X, Y):
-        """Compute grad_K in wrt first argument in matrix form 
-        """
         return -self.grad_second(X, Y)
 
     def grad_second(self, X, Y):
-        """Compute grad_K in wrt second argument in matrix form.
-        Args:
-            Xr: tf.Tensor of shape (..., n, dim)
-            Yr: tf.Tensor of shape (..., m, dim)
-        Output:
-            tf.Tensor of shape (..., n, m, dim)
-        """
         sigma2_inv = 1 / (1e-12 + self.sigma_sq)
         K = jnp.expand_dims(jnp.exp(- l2norm(X, Y) * sigma2_inv), -1) # n x m x 1
         # diff_{ijk} = y^i_j - x^i_k
@@ -115,15 +130,6 @@ class RBF(object):
         return self.scale * grad_K_XY
 
     def gradgrad(self, X, Y):
-        """
-        Compute trace(\nabla_x \nabla_y k(x, y)).
-
-        Args:
-            X: tf.Tensor of shape (..., n, dim)
-            Y: tf.Tensor of shape (..., m, dim)
-        Output:
-            tf.Tensor of shape (..., n, m)
-        """
         # Gram matrix
         sigma2_inv = 1 / (1e-12 + self.sigma_sq)
         diff_norm_sq = l2norm(X, Y) # n x m
@@ -140,12 +146,8 @@ class RBF(object):
         return jnp.abs(k_zero), jnp.abs(gradgrad_zero)
 
 
-class IMQ(object):
-    """A kernel class need to have the following methods:
-        __call__: kernel evaluation k(x, y)
-        grad_first: grad_x k(x, y)
-        grad_second: grad_y k(x, y)
-        gradgrad: grad_x grad_y k(x, y)
+class IMQ(Kernel):
+    """IMQ kernel k(x, y) = (1 + \|x - y\|_2^2 / \sigma^2)^\beta
     """
 
     def __init__(self, sigma_sq=None, beta=-0.5, med_heuristic=False, X=None, Y=None):
@@ -172,20 +174,13 @@ class IMQ(object):
         return 1.
     
     def bandwidth(self, X, Y):
-        """Compute magic bandwidth
+        """Compute med heuristic for bandwidth
         """
         dnorm2 = l2norm(X, Y)
         med_heuristic_sq = median_heuristic(dnorm2)
         self.sigma_sq = med_heuristic_sq
         
     def __call__(self, X, Y):
-        """
-        Args:
-            Xr: tf.Tensor of shape (..., n, dim)
-            Yr: tf.Tensor of shape (..., m, dim)
-        Output:
-            tf.Tensor of shape (..., n, m)
-        """
         dnorm2 = l2norm(X, Y)
         sigma2_inv = 1.0 / (self.sigma_sq + 1e-12)
         sigma2_inv = jnp.expand_dims(jnp.expand_dims(sigma2_inv, -1), -1)
@@ -194,18 +189,9 @@ class IMQ(object):
         return K_XY
 
     def grad_first(self, X, Y):
-        """Compute grad_K in wrt first argument in matrix form 
-        """
         return -self.grad_second(X, Y)
 
     def grad_second(self, X, Y):
-        """Compute grad_K in wrt second argument in matrix form.
-        Args:
-            Xr: tf.Tensor of shape (..., n, dim)
-            Yr: tf.Tensor of shape (..., m, dim)
-        Output:
-            tf.Tensor of shape (..., n, m, dim)
-        """
         sigma2_inv = 1 / (1e-12 + self.sigma_sq)
         K = 1. + jnp.expand_dims(l2norm(X, Y) * sigma2_inv, -1) # n x m x 1
         # diff_{ijk} = y^k_i - x^k_j
@@ -216,15 +202,6 @@ class IMQ(object):
         return grad_K_XY   
 
     def gradgrad(self, X, Y):
-        """
-        Compute trace(\nabla_x \nabla_y k(x, y)).
-
-        Args:
-            X: tf.Tensor of shape (..., n, dim)
-            Y: tf.Tensor of shape (..., m, dim)
-        Output:
-            tf.Tensor of shape (..., n, m)
-        """
         sigma2_inv = 1 / (1e-12 + self.sigma_sq)
         # norm of differences
         diff_norm_sq = l2norm(X, Y) # n x m
@@ -245,22 +222,21 @@ class IMQ(object):
         gradgrad_zero = jnp.squeeze(self.gradgrad(x, x))
         return jnp.abs(k_zero), jnp.abs(gradgrad_zero)
 
-class TiltedKernel(object):
+class TiltedKernel(Kernel):
+    """Tilted kernel k(x, y) = w(x) k_0(x, y) w(y)
+    """
 
     def __init__(self, kernel, weight_fn):
+        """
+        :param kernel: Base kernel k_0(x, y)
+        :param weight_fn: Weighting function w
+        """
         super().__init__()
         self.base_kernel = kernel
         self.weight_fn = weight_fn
         self.med_heuristic = None
 
     def __call__(self, X, Y):
-        """
-        Args:
-            X: tf.Tensor of shape (..., n, dim)
-            Y: tf.Tensor of shape (..., m, dim)
-        Output:
-            tf.Tensor of shape (..., n, m)
-        """
         K_XY = self.base_kernel(X, Y) # n, m
         W_X = self.weight_fn(X) # n
         W_Y = self.weight_fn(Y) # m
@@ -268,9 +244,6 @@ class TiltedKernel(object):
         return res
 
     def grad_first(self, X, Y):
-        """
-        Compute grad_K in wrt first argument in matrix form 
-        """
         K = self.base_kernel(X, Y)
         W_X = self.weight_fn(X)
         W_Y = self.weight_fn(Y)
@@ -283,14 +256,6 @@ class TiltedKernel(object):
         return term1 + term2
 
     def grad_second(self, X, Y):
-        """
-        Compute grad_K in wrt second argument in matrix form.
-        Args:
-            X: tf.Tensor of shape (..., n, dim)
-            Y: tf.Tensor of shape (..., m, dim)
-        Output:
-            tf.Tensor of shape (..., n, m, dim)
-        """
         K = self.base_kernel(X, Y)
         W_X = self.weight_fn(X)
         W_Y = self.weight_fn(Y)
@@ -305,9 +270,6 @@ class TiltedKernel(object):
         return term1 + term2
 
     def gradgrad(self, X, Y):
-        """
-        Compute trace(\nabla_x \nabla_y k(x, y)).
-        """
         K = self.base_kernel(X, Y)
         grad_K_X = self.base_kernel.grad_first(X, Y) # n, m, d
         grad_K_Y = self.base_kernel.grad_second(X, Y) # n, m, d
@@ -330,12 +292,56 @@ class TiltedKernel(object):
 
         return term1 + term2 + term3 + term4
 
+class SumKernel(Kernel):
+    """Sum of kernels k(x, y) = \sum_{l=1}^L k_l(x, y).
+    """
+    
+    def __init__(self, kernels):
+        """
+        :param kernels: list of Kernel objects
+        """
+        self.kernels = kernels
 
+    def __call__(self, X, Y):
+        res = 0.
+        for kernel in self.kernels:
+            res += kernel(X, Y)
+
+        return res
+
+    def grad_first(self, X, Y):
+        return -self.grad_second(X, Y)
+
+    def grad_second(self, X, Y):
+        res = 0.
+        for kernel in self.kernels:
+            res += kernel.grad_second(X, Y)
+
+        return res
+
+    def gradgrad(self, X, Y):
+        res = 0.
+        for kernel in self.kernels:
+            res += kernel.gradgrad(X, Y)
+
+        return res
+    
 class WeightFunction(object):
-    def __call__(self, X, score):
+    """Weighting function w: R^d \to [0, \infty)
+    """
+
+    def __call__(self, X):
+        """Compute w(x)
+
+        :param X: jnp.array of shape (..., n, dim)
+        """
         raise NotImplementedError
 
-    def grad(self, X, score, hvp):
+    def grad(self, X):
+        """Compute \nabla w(x)
+
+        :param X: jnp.array of shape (..., n, dim)
+        """
         raise NotImplementedError
 
     def set_sup(self, weighted_score_sup, sup, derivative_sup):
@@ -344,13 +350,14 @@ class WeightFunction(object):
         self.derivative_sup = derivative_sup
 
 class PolyWeightFunction(WeightFunction):
-    """#TODO only works for Gaussian score.
-
-    For an arbitrary score function, need the hessian of score.
+    """Polynomial weighting function w(x) = (1 + \|x - loc\|_2^2 / a^2)^(-b)
     """
 
     def __init__(self, b = 0.5, loc = 0., a = 1., weighted_score_sup: float = None):
-        """m(x) = (1 + \| x - loc \|_2^2 / a^2)^(-b)
+        """
+        :param b: float, must be positive
+        :param loc: jnp.array of shape (dim,)
+        :param a: float, must be positive
         """
         self.loc = jnp.array(loc)
         self.b = b
@@ -374,41 +381,4 @@ class PolyWeightFunction(WeightFunction):
             jax.lax.pow(1 + score_norm_sq / self.a**2, -self.b - 1),
             -1,
         ) * (X - self.loc) * self.a**(-2) # n, d
-        return res
-    
-class SumKernel(object):
-    def __init__(self, kernels):
-        self.kernels = kernels
-
-    def __call__(self, X, Y):
-        res = 0.
-        for kernel in self.kernels:
-            res += kernel(X, Y)
-
-        return res
-
-    def grad_first(self, X, Y):
-        """Compute grad_K in wrt first argument in matrix form 
-        """
-        return -self.grad_second(X, Y)
-
-    def grad_second(self, X, Y):
-        """Compute grad_K in wrt second argument in matrix form.
-        Args:
-            Xr: tf.Tensor of shape (..., n, dim)
-            Yr: tf.Tensor of shape (..., m, dim)
-        Output:
-            tf.Tensor of shape (..., n, m, dim)
-        """
-        res = 0.
-        for kernel in self.kernels:
-            res += kernel.grad_second(X, Y)
-
-        return res
-
-    def gradgrad(self, X, Y):
-        res = 0.
-        for kernel in self.kernels:
-            res += kernel.gradgrad(X, Y)
-
         return res

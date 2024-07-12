@@ -52,7 +52,7 @@ if __name__ == "__main__":
     eps_ls = [0., 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.]
 
     # 1. generate data
-    if args.gen == "True":
+    if args.gen == True:
         key = jax.random.key(args.seed)
         keys = jax.random.split(key, 4)
 
@@ -110,7 +110,7 @@ if __name__ == "__main__":
     # 2. run test
     X_res = pickle.load(open(os.path.join(SAVE_DIR, f"X_res_n{args.n}_seed{args.seed}.pkl"), "rb"))
     score_res = pickle.load(open(os.path.join(SAVE_DIR, f"score_res_n{args.n}_seed{args.seed}.pkl"), "rb"))
-    tau_res = pickle.load(open(os.path.join(SAVE_DIR, f"tau_n{args.n}_seed{args.seed}.pkl"), "rb"))
+    # tau_res = pickle.load(open(os.path.join(SAVE_DIR, f"tau_n{args.n}_seed{args.seed}.pkl"), "rb"))
 
     print("start testing")
     bw = "med"
@@ -122,12 +122,14 @@ if __name__ == "__main__":
         print("eps:", eps)
         Xs = X_res[eps]
         scores = score_res[eps]
-        tau = tau_res[eps]
-        theta = eps0 * tau**0.5
+        # tau = tau_res[eps]
+        # theta = eps0 * tau**0.5
 
         res[eps] = exp_utils.run_tests(
             samples=Xs, scores=scores, hvps=None, hvp_denom_sup=None, 
-            theta=theta, bw=bw, alpha=0.05, verbose=True, base_kernel="IMQ", weight_fn_args=weight_fn_args,
+            # theta=theta, 
+            bw=bw, alpha=0.05, verbose=True, base_kernel="IMQ", weight_fn_args=weight_fn_args,
+            compute_tau=True, eps0=eps0,
         )
 
     # 3. save results

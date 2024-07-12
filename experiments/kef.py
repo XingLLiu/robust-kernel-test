@@ -29,7 +29,7 @@ class NormalLocModel(ExpFamilyModel):
 
     def _compute_grads(self, x):
         """
-        @param: x: n, 1
+        :param: x: n, 1
         """
         JT = jax.vmap(lambda x: jax.jacfwd(self.t)(x))(x) # n, L, 1
 
@@ -61,7 +61,7 @@ class KernelExpFamily(ExpFamilyModel):
     
     def _compute_grads(self, x):
         """
-        @param: x: n, 1
+        :param: x: n, 1
         """
         JT = jax.vmap(lambda x: jax.jacfwd(self.t)(x))(x) # n, L, 1
 

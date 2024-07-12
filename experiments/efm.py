@@ -132,7 +132,7 @@ class EFM(ExpFamilyModel):
 
     def _compute_grads(self, x):
         """
-        @return:
+        :return:
             JT: n, r, d
             grad_b: n, d
             lap_T: n, r 
