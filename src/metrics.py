@@ -266,6 +266,14 @@ class KSD(Metric):
         return self.u_p(X, Y, **kwargs)
 
     def vstat(self, X: jnp.array, Y: jnp.array, output_dim: int = 2, score: jnp.array = None):
+        """Compute the V-statistic of the KSD.
+
+        :param X: jnp.array of shape (n, dim)
+        :param Y: jnp.array of shape (m, dim)
+        :param output_dim: int, 1 or 2. If 1, then the KSD estimate is returned. If 2, then the Gram matrix
+            of shape (n, m) is returned.
+        :param score: jnp.array of shape (n, dim). If provided, the score values are used to compute the KSD.
+        """
         return self.u_p(X, Y, output_dim=output_dim, vstat=True, score=score)
 
     def u_p(self, X: jnp.array, Y: jnp.array, output_dim: int = 1, vstat: bool = False, score: jnp.array = None):
@@ -276,6 +284,7 @@ class KSD(Metric):
         :param output_dim: int, 1 or 2. If 1, then the KSD estimate is returned. If 2, then the Gram matrix
             of shape (n, m) is returned.
         :param vstat: bool. If True, the V-statistic is returned. Otherwise the U-statistic is returned.
+        :param score: jnp.array of shape (n, dim). If provided, the score values are used to compute the KSD.
         """
         # calculate scores using autodiff
         if self.score_fn is None and score is None:
@@ -364,15 +373,6 @@ class KSD(Metric):
         elif method == "ball_robust":
             gamma_n = self.compute_deviation_threshold(n, tau, alpha)
             threshold = theta + gamma_n
-
-        elif method == "CLT":
-            assert X is not None, "X must be provided for the CLT threshold."
-            norm_q = sci_stats.norm.ppf(1 - alpha)
-            var_hat = self.jackknife(X, score=score, hvp=hvp)
-            self.var_hat = var_hat
-            term1 = 2 * var_hat**0.5 * norm_q / jnp.sqrt(n)
-            # threshold = jnp.sqrt(term1 + theta**2)
-            threshold = term1 + theta**2
 
         elif method == "boot":
             bootstrap = boot.WildBootstrap(self, ndraws=nboot)
