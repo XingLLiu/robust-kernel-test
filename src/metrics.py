@@ -355,10 +355,10 @@ class KSD(Metric):
         """
 
         # set theta
-        if theta == "ol":
-            assert tau is not None
-            assert eps0 is not None
-            theta = eps0 * tau**0.5
+        # if theta == "ol":
+        #     assert tau is not None
+        #     assert eps0 is not None
+        #     theta = eps0 * tau**0.5
         
         self.theta = theta
 

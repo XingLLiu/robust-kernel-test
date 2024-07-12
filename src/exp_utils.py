@@ -14,16 +14,20 @@ import src.ksdagg as src_ksdagg
 def change_theta(res, methods, theta, tau=None):
     """Given a dictionary of results, change the theta value and the test outcome.
     """
-    res["theta"] = theta
+    thetas = jnp.array(theta)
+    if len(theta) == 1:
+        thetas = [thetas] * len(res["standard"]["stat"])
+
+    res["theta"] = thetas
     for mm in methods:
-        res[mm]["theta"] = [theta] * len(res[mm]["theta"])
+        res[mm]["theta"] = thetas
 
         if mm == "tilted_r_boot" or mm == "tilted_r_dev":
-            res[mm]["rej"] = [int(max(0, stat**0.5 - theta) > gam) for stat, gam in zip(res[mm]["stat"], res[mm]["gamma"])]
+            res[mm]["rej"] = [int(max(0, stat**0.5 - tt) > gam) for stat, gam, tt in zip(res[mm]["stat"], res[mm]["gamma"], thetas)]
         elif mm == "tilted_r_bootmax":
-            res[mm]["rej"] = [int(stat > gam**2 + theta**2) for stat, gam in zip(res[mm]["stat"], res[mm]["gamma"])]
+            res[mm]["rej"] = [int(stat > gam**2 + tt**2) for stat, gam, tt in zip(res[mm]["stat"], res[mm]["gamma"], thetas)]
         elif mm == "tilted_r_dev":
-            res[mm]["rej"] = [int(max(0, stat**0.5 - theta) > tau) for stat in res[mm]["stat"]]
+            res[mm]["rej"] = [int(max(0, stat**0.5 - tt) > tau) for stat, tt in zip(res[mm]["stat"], thetas)]
     
     return res
 
@@ -102,10 +106,10 @@ def run_tests(
         kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=weight_fn)
 
         ksd = metrics.KSD(kernel)
-        ustat = ksd(X, X, vstat=False, score=score, hvp=hvp)
+        ustat = ksd(X, X, vstat=False, score=score)
         thresh_res = ksd.test_threshold(
             n=n, eps0=eps0, theta=theta, alpha=alpha, method="boot_both", X=X, score=score, 
-            hvp=hvp, return_pval=True, compute_tau=compute_tau,
+            return_pval=True, compute_tau=compute_tau,
         )
         q_max = thresh_res["q_max"]
         q_degen_nonsq = thresh_res["q_degen_nonsq"]

@@ -3,10 +3,12 @@ import jax.numpy as jnp
 
 
 class Bootstrap:
+    """Base class for bootstrap tests.
+    """
 
     def __init__(self, divergence, ndraws: int = 1000):
         """
-        :param mmd: MMD object
+        :param divergence: KSD object
         :param ndraws: number of bootstrap draws
         """
         self.divergence = divergence
@@ -16,8 +18,7 @@ class Bootstrap:
         raise NotImplementedError
 
     def pval(self, X, Y: jnp.array = None, return_boot: bool = False, return_stat: bool = False, score: jnp.ndarray = None, hvp: jnp.array = None):
-        """
-        Compute the p-value for the MMD test.
+        """Compute the p-value for the KSD test.
 
         :param X: numpy array of shape (n, d)
         :param Y: numpy array of shape (m, d)
@@ -35,6 +36,10 @@ class Bootstrap:
 
 
 class WildBootstrap(Bootstrap):
+    """Efron's bootstrap, also known as weighted bootstrap
+
+    Huskova and Janssen (1993). Consistency of the Generalized Bootstrap for Degenerate U-statistics.
+    """
 
     def __init__(self, divergence, ndraws: int = 1000):
         """
@@ -44,12 +49,14 @@ class WildBootstrap(Bootstrap):
         self.divergence = divergence
         self.ndraws = ndraws
 
-    def compute_bootstrap(self, X, Y, score: jnp.ndarray = None, hvp: jnp.array = None, degen: bool = True):
+    def compute_bootstrap(self, X, Y, score: jnp.ndarray = None, degen: bool = True):
         """
-        Compute the threshold for the MMD test.
+        Compute bootstrapped statistics.
 
         :param X: numpy array of shape (n, d)
         :param Y: numpy array of shape (m, d)
+        :param degen: bool. Whether to center the multinomial weights by their mean. Set to True
+            for the standard KSD test.
         """
         assert X.shape[-2] == Y.shape[-2], "X and Y must have the same sample size."
         
@@ -63,7 +70,7 @@ class WildBootstrap(Bootstrap):
             r = np.random.multinomial(n, pvals=[1/n]*n, size=self.ndraws) # b, n
 
         # compute test stat
-        vstat = self.divergence.vstat(X, Y, score=score, hvp=hvp) # n, n
+        vstat = self.divergence.vstat(X, Y, score=score) # n, n
         self.gram_mat = vstat
         test_stat = jnp.sum(vstat) / (n**2)
         

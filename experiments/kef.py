@@ -396,7 +396,7 @@ if __name__ == "__main__":
     # 2. test
     X_res = pickle.load(open(os.path.join(SAVE_DIR, f"kef_{args.data}_{args.exp}_X_res_seed{args.seed}.pkl"), "rb"))
     score_res = pickle.load(open(os.path.join(SAVE_DIR, f"kef_{args.data}_{args.exp}_score_res_seed{args.seed}.pkl"), "rb"))
-    tau_res = pickle.load(open(os.path.join(SAVE_DIR, f"kef_{args.data}_{args.exp}_tau.pkl"), "rb"))
+    # tau_res = pickle.load(open(os.path.join(SAVE_DIR, f"kef_{args.data}_{args.exp}_tau.pkl"), "rb"))
 
     print("start testing")
     bw = 2.*1**2
@@ -412,11 +412,13 @@ if __name__ == "__main__":
             for ol_mean in ol_mean_ls:
                 Xs = X_res[eps][ol_mean]
                 scores = score_res[eps][ol_mean]
-                theta = eps0 * tau_res[eps][ol_mean]**0.5
+                # theta = eps0 * tau_res[eps][ol_mean]**0.5
 
                 res[eps][ol_mean] = exp_utils.run_tests(
                     samples=Xs, scores=scores, hvps=None, hvp_denom_sup=None, 
-                    theta=theta, bw=bw, alpha=0.05, verbose=True, base_kernel="IMQ", weight_fn_args=None,
+                    # theta=theta, 
+                    bw=bw, alpha=0.05, verbose=True, base_kernel="IMQ", weight_fn_args=None,
+                    compute_tau=True, eps0=eps0,    
                 )
 
     elif args.exp == "power2":
@@ -424,11 +426,13 @@ if __name__ == "__main__":
         for param in param_ls:
             Xs = X_res[param]
             scores = score_res[param]
-            theta = eps0 * tau_res[param]**0.5
+            # theta = eps0 * tau_res[param]**0.5
 
             res[param] = exp_utils.run_tests(
                 samples=Xs, scores=scores, hvps=None, hvp_denom_sup=None, 
-                theta=theta, bw=bw, alpha=0.05, verbose=True, base_kernel="IMQ", weight_fn_args=None,
+                # theta=theta, 
+                bw=bw, alpha=0.05, verbose=True, base_kernel="IMQ", weight_fn_args=None,
+                compute_tau=True, eps0=eps0,
             )
 
     # 3. save results
