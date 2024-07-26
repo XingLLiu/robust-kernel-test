@@ -1,5 +1,6 @@
 import jax
 import jax.numpy as jnp
+import time
 import scipy.stats as sci_stats
 from numpy.random import multinomial
 import src.bootstrap as boot
@@ -348,7 +349,7 @@ class KSD(Metric):
     def test_threshold(
             self, n: int, eps0: float = None, theta: float = None, alpha: float = 0.05, method: str = "deviation",
             X: jnp.array = None, score=None, nboot: int = 500, return_pval: bool = False,
-            compute_tau: bool = True,
+            compute_tau: bool = True
         ):
         """
         Compute the threshold for the robust test. Threshold = \gamma + \theta.

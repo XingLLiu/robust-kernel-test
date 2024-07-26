@@ -6,6 +6,7 @@ import os
 from tqdm import trange
 import jaxopt
 import copy
+import time
 
 
 import src.metrics as metrics
@@ -45,14 +46,14 @@ if __name__ == "__main__":
     parser.add_argument("--n", type=int)
     parser.add_argument("--dim", type=int)
     parser.add_argument("--hdim", type=int)
-    parser.add_argument("--gen", type=str)
+    parser.add_argument("--gen", type=bool)
     args = parser.parse_args()
 
 
     eps_ls = [0., 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.]
 
     # 1. generate data
-    if args.gen == True:
+    if args.gen:
         key = jax.random.key(args.seed)
         keys = jax.random.split(key, 4)
 
@@ -69,42 +70,53 @@ if __name__ == "__main__":
         nrep_keys = jax.random.split(keys[3], args.nrep)
         nrep_seed = jax.random.key_data(nrep_keys)
         print("Sampling data")
+        time_sample = np.empty((args.nrep,))
         for i in trange(args.nrep):
+            time0 = time.time()
             X = rbm_sampler.sample(args.n, seed=nrep_seed[i, 1]).data()
             Xs_raw = Xs_raw.at[i].set(X)
+            time_sample[i] = time.time() - time0
 
         # perturb
         Xs_res = {}
         scores_res = {}
         tau_res = {}
+        ol_res = {}
         for eps in eps_ls:
             print("eps:", eps) 
             Xs = copy.deepcopy(Xs_raw)
             scores = jnp.empty((args.nrep, args.n, args.dim))
+            ols = []
 
             for i in trange(args.nrep):
-                X = exp_efm.sample_outlier_contam(Xs[i], eps=eps, ol_mean=np.zeros((args.dim,)), ol_std=0.1)
+                X, ol = exp_efm.sample_outlier_contam(
+                    Xs[i], eps=eps, ol_mean=np.zeros((args.dim,)), ol_std=0.1, return_ol=True,
+                )
                 Xs = Xs.at[i].set(X)
                 scores = scores.at[i].set(rbm_model.grad_log(X))
+                ols.append(ol)
 
             Xs_res[eps] = Xs
             scores_res[eps] = scores
+            ol_res[eps] = ols
 
-            # find tau
-            score_weight_fn = kernels.PolyWeightFunction(loc=jnp.zeros((args.dim,)))
-            kernel0 = kernels.IMQ(med_heuristic=True, X=X, Y=X)
-            kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
-            ksd = metrics.KSD(kernel, score_fn=rbm_model.grad_log)
+            # # find tau
+            # score_weight_fn = kernels.PolyWeightFunction(loc=jnp.zeros((args.dim,)))
+            # kernel0 = kernels.IMQ(med_heuristic=True, X=X, Y=X)
+            # kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
+            # ksd = metrics.KSD(kernel, score_fn=rbm_model.grad_log)
         
-            opt_res = parallel_optimize(Xs[0, :20], ksd, maxiter=500)
-            tau = jnp.max(-opt_res)
-            tau_res[eps] = tau
-            print("tau", tau)
+            # opt_res = parallel_optimize(Xs[0, :20], ksd, maxiter=500)
+            # tau = jnp.max(-opt_res)
+            # tau_res[eps] = tau
+            # print("tau", tau)
 
         # save data
         pickle.dump(Xs_res, open(os.path.join(SAVE_DIR, f"X_res_n{args.n}_seed{args.seed}.pkl"), "wb"))
         pickle.dump(scores_res, open(os.path.join(SAVE_DIR, f"score_res_n{args.n}_seed{args.seed}.pkl"), "wb"))
-        pickle.dump(tau_res, open(os.path.join(SAVE_DIR, f"tau_n{args.n}_seed{args.seed}.pkl"), "wb"))
+        # pickle.dump(tau_res, open(os.path.join(SAVE_DIR, f"tau_n{args.n}_seed{args.seed}.pkl"), "wb"))
+        pickle.dump(ol_res, open(os.path.join(SAVE_DIR, f"ol_res_n{args.n}_seed{args.seed}.pkl"), "wb"))
+        pickle.dump(time_sample, open(os.path.join(SAVE_DIR, f"time_sample_n{args.n}_seed{args.seed}.pkl"), "wb"))
 
 
     # 2. run test
@@ -129,7 +141,8 @@ if __name__ == "__main__":
             samples=Xs, scores=scores, hvps=None, hvp_denom_sup=None, 
             # theta=theta, 
             bw=bw, alpha=0.05, verbose=True, base_kernel="IMQ", weight_fn_args=weight_fn_args,
-            compute_tau=True, eps0=eps0,
+            compute_tau=True, eps0=eps0, 
+            time=True
         )
 
     # 3. save results

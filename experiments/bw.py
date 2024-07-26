@@ -6,7 +6,7 @@ import os
 from tqdm import tqdm
 
 import src.exp_utils as exp_utils
-import experiments.ol as exp_ol
+import experiments.efm as exp_efm
 
 from pathlib import Path
 import argparse
@@ -34,10 +34,13 @@ if __name__ == "__main__":
 
         eps_ls = [0., 0.01, 0.05, 0.075, 0.1, 0.125, 0.15, 0.2]
     
-    if args.exp == "ol":
+    elif args.exp == "ol":
         ol_ls = [0.1, 1., 10., 25., 50., 100.]
 
         eps_ls = [0.05]
+
+    else:
+        raise ValueError("Invalid experiment")
 
     bandwidth_ls = ["med", 1e-2, 1e-1, 1., 10., 100.]
     ksdagg_bw = jnp.sqrt(2 * jnp.array(bandwidth_ls[1:]))
@@ -60,7 +63,7 @@ if __name__ == "__main__":
 
             for eps in eps_ls:
                 Xs = np.random.multivariate_normal(mean_data, np.eye(dim), (args.nrep, args.n)) # nrep, n, 1
-                Xs = jax.vmap(lambda x: exp_ol.sample_outlier_contam(x, eps, ol))(Xs)
+                Xs = jax.vmap(lambda x: exp_efm.sample_outlier_contam(x, eps=eps, ol_mean=ol, ol_std=0.))(Xs)
                 assert Xs.shape == (args.nrep, args.n, dim)
 
                 X_res[ol_key][eps] = Xs
@@ -94,8 +97,10 @@ if __name__ == "__main__":
                 res[bw][ol_key][eps] = exp_utils.run_tests(
                     samples=X_res[ol][eps], scores=score_res[ol][eps], hvps=None,
                     hvp_denom_sup=None,
-                    theta="ol", eps0=eps0, bw=bw, alpha=0.05, verbose=True,
+                    # theta="ol", eps0=eps0, 
+                    bw=bw, alpha=0.05, verbose=True,
                     run_ksdagg=run_ksdagg, ksdagg_bw=ksdagg_bw,
+                    compute_tau=True, eps0=eps0,
                 )
 
     # 3. save results

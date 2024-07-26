@@ -58,7 +58,7 @@ if __name__ == "__main__":
 
     # outliers
     # ol_ls = [1.] #!
-    ol_ls = [0.1, 1., 10.]
+    ol_ls = [0.1, 1., 10., 100.]
     ol_ls = [np.eye(dim)[0, :] * yy for yy in ol_ls]
 
     # eps_ls = [0., 0.01] #!
@@ -68,7 +68,7 @@ if __name__ == "__main__":
     mean_data = np.zeros((dim,)) # data
     score_fn = lambda x: - x # model
     
-    if args.gen == True:
+    if args.gen:
         X_res = {}
         X_model_res = {}
         score_res = {}
@@ -151,9 +151,9 @@ if __name__ == "__main__":
                     bw="med", alpha=0.05, verbose=True,
                     run_ksdagg=bool(args.run_ksdagg),
                     run_dev=True, 
-                    run_dcmmd=True, samples_p=X_model_res[ol][eps], eps0=eps0,
+                    run_dcmmd=True, samples_p=X_model_res[ol][eps], 
                     run_devmmd=True,
-                    compute_tau=True,
+                    compute_tau=True, eps0=eps0,
                 )
             
             else:

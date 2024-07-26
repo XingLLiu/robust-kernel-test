@@ -356,40 +356,22 @@ if __name__ == "__main__":
                 est_params_res[param] = jnp.stack(est_params_ls, 0)
 
                 # # find tau
-                # xx = jnp.linspace(-20., 20., 10001)
-                # # xx = jnp.concatenate(
-                # #     [jnp.linspace(-15., 0, 10001), jnp.linspace(15., 30, 10001)],
-                # #     0,
-                # # )
-                # xx = jnp.reshape(xx, (-1, 1))
-                # ss = jax.vmap(trained_kef_model.score)(xx)
-
-                # poly_weight_fn = kernels.PolyWeightFunction()
+                # score_weight_fn = kernels.PolyWeightFunction()
                 # kernel0 = kernels.IMQ(sigma_sq=2*1.**2)
-                # test_kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=poly_weight_fn)
-
-                # ksd = metrics.KSD(test_kernel)
-                # idx = jnp.arange(xx.shape[0])
-                # ksd_vals = jax.vmap(lambda i: compute_ksd(xx[i], ss[i], ksd))(idx)
-                
-                # tau = jnp.max(ksd_vals)
-
-                score_weight_fn = kernels.PolyWeightFunction()
-                kernel0 = kernels.IMQ(sigma_sq=2*1.**2)
-                kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
-                ksd = metrics.KSD(kernel, score_fn=lambda X: jax.vmap(trained_kef_model.score)(X))
+                # kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
+                # ksd = metrics.KSD(kernel, score_fn=lambda X: jax.vmap(trained_kef_model.score)(X))
             
-                opt_res = parallel_optimize(Xtest_ls[0][:20], ksd, maxiter=500)
-                tau = jnp.max(-opt_res)
+                # opt_res = parallel_optimize(Xtest_ls[0][:20], ksd, maxiter=500)
+                # tau = jnp.max(-opt_res)
 
-                tau_res[param] = tau
-                print("tau", tau)
+                # tau_res[param] = tau
+                # print("tau", tau)
 
 
         # save data
         pickle.dump(Xtest_res, open(os.path.join(SAVE_DIR, f"kef_{args.data}_{args.exp}_X_res_seed{args.seed}.pkl"), "wb"))
         pickle.dump(score_res, open(os.path.join(SAVE_DIR, f"kef_{args.data}_{args.exp}_score_res_seed{args.seed}.pkl"), "wb"))
-        pickle.dump(tau_res, open(os.path.join(SAVE_DIR, f"kef_{args.data}_{args.exp}_tau.pkl"), "wb"))
+        # pickle.dump(tau_res, open(os.path.join(SAVE_DIR, f"kef_{args.data}_{args.exp}_tau.pkl"), "wb"))
         pickle.dump(est_params_res, open(os.path.join(SAVE_DIR, f"kef_{args.data}_{args.exp}_est_params_res_seed{args.seed}.pkl"), "wb"))
 
 

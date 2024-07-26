@@ -174,32 +174,8 @@ class EFM(ExpFamilyModel):
 def compute_hvp(f, x, v):
     return jax.grad(lambda x: jnp.vdot(jax.grad(f)(x), v))(x)
 
-# def compute_hvp_vec(f, xs, vs):
-#     return jax.vmap(lambda xx: compute_hvp(f, xx, v))(xs)
 
-# def compute_hvp_vec(f, primals, tangents):
-#   return jax.jvp(jax.grad(f), primals, tangents)[1]
-
-
-# def inference_loop_multiple_chains(
-#     rng_key, initial_states, tuned_params, log_prob_fn, num_samples, num_chains
-# ):
-#     kernel = blackjax.nuts.build_kernel()
-
-#     def step_fn(key, state, **params):
-#         return kernel(key, state, log_prob_fn, **params)
-
-#     def one_step(states, rng_key):
-#         keys = jax.random.split(rng_key, num_chains)
-#         states, infos = jax.vmap(step_fn)(keys, states, **tuned_params)
-#         return states, (states, infos)
-
-#     keys = jax.random.split(rng_key, num_samples)
-#     _, (states, infos) = jax.lax.scan(one_step, initial_states, keys)
-
-#     return (states, infos)
-
-def sample_outlier_contam(X: jnp.ndarray, eps: float, ol_mean: float, ol_std: float):
+def sample_outlier_contam(X: jnp.ndarray, eps: float, ol_mean: float, ol_std: float, return_ol: bool = False):
     n, d = X.shape[0], X.shape[1]
     ncontam = int(n * eps)
     if ol_std > 0:
@@ -208,7 +184,11 @@ def sample_outlier_contam(X: jnp.ndarray, eps: float, ol_mean: float, ol_std: fl
         outliers = ol_mean
     idx = np.random.choice(range(n), size=ncontam, replace=False) # ncontam
     X = X.at[idx].set(outliers)
-    return X
+    
+    if not return_ol:
+        return X
+    else:
+        return X, outliers
 
 
 SAVE_DIR = "data/efm"

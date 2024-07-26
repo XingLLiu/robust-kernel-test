@@ -58,7 +58,7 @@ if __name__ == "__main__":
     parser.add_argument("--dim", type=int)
     parser.add_argument("--nrep", type=int)
     parser.add_argument("--bw", type=float, default=None)
-    parser.add_argument("--gen", type=bool, default=True)
+    parser.add_argument("--gen", type=bool, default=False)
     parser.add_argument("--nmix", type=int)
     args = parser.parse_args()
 
@@ -115,23 +115,23 @@ if __name__ == "__main__":
             X_res[scale] = Xs
             score_res[scale] = scores
 
-            # find tau
-            X = Xs[0]
-            a = np.percentile(jnp.sum(X**2, -1)**0.5, 50.0)
-            score_weight_fn = kernels.PolyWeightFunction(a=a)
-            kernel0 = kernels.IMQ(med_heuristic=True, X=X, Y=X)
-            kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
-            ksd = metrics.KSD(kernel, score_fn=score_fn)
+            # # find tau
+            # X = Xs[0]
+            # a = np.percentile(jnp.sum(X**2, -1)**0.5, 50.0)
+            # score_weight_fn = kernels.PolyWeightFunction(a=a)
+            # kernel0 = kernels.IMQ(med_heuristic=True, X=X, Y=X)
+            # kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
+            # ksd = metrics.KSD(kernel, score_fn=score_fn)
         
-            opt_res = parallel_optimize(Xs[0, :20], ksd, maxiter=500)
-            tau = jnp.max(-opt_res)
-            tau_res[scale] = tau
-            print("tau", tau)
+            # opt_res = parallel_optimize(Xs[0, :20], ksd, maxiter=500)
+            # tau = jnp.max(-opt_res)
+            # tau_res[scale] = tau
+            # print("tau", tau)
 
         # save data
         pickle.dump(X_res, open(os.path.join(SAVE_DIR, f"X_res_n{args.n}_d{dim}.pkl"), "wb"))
         pickle.dump(score_res, open(os.path.join(SAVE_DIR, f"score_res_n{args.n}_d{dim}.pkl"), "wb"))
-        pickle.dump(tau_res, open(os.path.join(SAVE_DIR, f"tau_d{dim}.pkl"), "wb"))
+        # pickle.dump(tau_res, open(os.path.join(SAVE_DIR, f"tau_d{dim}.pkl"), "wb"))
 
         params_setup = {"means": means, "model_ratios": model_ratio_ls, "data_ratios": data_ratio_ls}
         pickle.dump(params_setup, open(os.path.join(SAVE_DIR, f"setup_d{dim}.pkl"), "wb"))
@@ -141,7 +141,7 @@ if __name__ == "__main__":
     else:
         X_res = pickle.load(open(os.path.join(SAVE_DIR, f"X_res_n{args.n}_d{dim}.pkl"), "rb"))
         score_res = pickle.load(open(os.path.join(SAVE_DIR, f"score_res_n{args.n}_d{dim}.pkl"), "rb"))
-        tau_res = pickle.load(open(os.path.join(SAVE_DIR, f"tau_d{dim}.pkl"), "rb"))
+        # tau_res = pickle.load(open(os.path.join(SAVE_DIR, f"tau_d{dim}.pkl"), "rb"))
 
         X_res = {kk: xx[:, :args.n, :] for kk, xx in X_res.items()}
         score_res = {kk: xx[:, :args.n, :] for kk, xx in score_res.items()}
@@ -153,12 +153,14 @@ if __name__ == "__main__":
     res = {}
         
     for scale in scale_ls:
-        tau = tau_res[scale]
-        theta = eps0 * tau**0.5
+        # tau = tau_res[scale]
+        # theta = eps0 * tau**0.5
 
         res[scale] = exp_utils.run_tests(
             samples=X_res[scale], scores=score_res[scale], hvps=None, hvp_denom_sup=None,
-            theta=theta, bw="med", alpha=0.05, verbose=True,
+            # theta=theta, 
+            bw="med", alpha=0.05, verbose=True,
+            compute_tau=True, eps0=eps0,
         )
 
     # 3. save results

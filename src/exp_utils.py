@@ -2,6 +2,7 @@ import jax
 import numpy as np
 import jax.numpy as jnp
 from tqdm import tqdm, trange
+import time
 
 from dckernel import dcmmd
 
@@ -15,7 +16,7 @@ def change_theta(res, methods, theta, tau=None):
     """Given a dictionary of results, change the theta value and the test outcome.
     """
     thetas = jnp.array(theta)
-    if len(theta) == 1:
+    if thetas.shape == () or len(thetas) == 1:
         thetas = [thetas] * len(res["standard"]["stat"])
 
     res["theta"] = thetas
@@ -35,12 +36,12 @@ def run_tests(
         samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=None, alpha=0.05, verbose=False,
         weight_fn_args=None, base_kernel="IMQ", run_ksdagg=False, ksdagg_bw=None, run_dev=False, tau=None,
         run_devmmd=False, run_dcmmd=False, samples_p=None, key=2024,
-        compute_tau=False,
+        compute_tau=False, time=False
     ):
     res = {
         "standard": {"nonsq_stat": [], "stat": [], "u_stat": [], "pval": [], "rej": [], "boot_stats": []},
-        "tilted": {"nonsq_stat": [], "stat": [], "u_stat": [], "pval": [], "rej": [], "boot_stats": []},
-        "tilted_r_boot": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "pval": []},
+        "tilted": {"nonsq_stat": [], "stat": [], "u_stat": [], "pval": [], "rej": [], "boot_stats": [], "time": []},
+        "tilted_r_boot": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "pval": [], "tau": []},
         "tilted_r_bootmax": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "tau": []},
         "tilted_r_dev": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "tau": []},
     }
@@ -91,7 +92,7 @@ def run_tests(
 
         ksd = metrics.KSD(kernel)
         wild_boot = boot.WildBootstrap(ksd)
-        pval, vstat, boot_stats = wild_boot.pval(X, X, return_stat=True, return_boot=True, score=score)
+        pval, vstat, boot_stats = wild_boot.pval(X, return_stat=True, return_boot=True, score=score)
         ustat = ksd(X, X, vstat=False, score=score)
         res["standard"]["stat"].append(vstat)
         res["standard"]["nonsq_stat"].append(vstat**0.5)
@@ -124,6 +125,10 @@ def run_tests(
         res["tilted"]["u_stat"].append(ustat)
         res["tilted"]["pval"].append(pval_standard)
         res["tilted"]["rej"].append(int(pval_standard < alpha))
+        if time:
+            time0 = time.time()
+            _ = ksd(X, X, vstat=True, score=score)
+            res["tilted"]["time"] = time.time() - time0
         
         # 3. bootstrap degen
         res["tilted_r_boot"]["stat"].append(vstat)
@@ -134,6 +139,7 @@ def run_tests(
         res["tilted_r_boot"]["theta"].append(theta)
         res["tilted_r_boot"]["rej"].append(int(max(0, nonsq_stat - theta) > q_degen_nonsq))
         res["tilted_r_boot"]["pval"].append(thresh_res["pval_degen"])
+        res["tilted_r_boot"]["tau"].append(tau)
 
         # 4. bootstrap
         res["tilted_r_bootmax"]["stat"].append(vstat)

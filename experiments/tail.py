@@ -29,6 +29,16 @@ def t_score_fn(X, df):
     t_pdf_multivariate_fn = lambda x: t_pdf_multivariate(x, df, scale)
     return jax.vmap(jax.grad(t_pdf_multivariate_fn))(X)
 
+def compute_nu_threshold(theta, tau):
+    """Compute lower bound for degree-of-freedom nu so that 
+    \KSD(t_\nu, P) = \theta + o(1), where P = \cN(0, 1).
+    """
+    # lb = tau**(7/4) / theta**(7/2) * ((10 * jnp.sqrt(2 * jnp.pi))**(-1) + 1)**(7/2)
+    delta0 = tau**0.5 / theta
+    # print(delta0 * (10 * jnp.sqrt(2 * jnp.pi))**(-1))
+    lb = (delta0 * (2 * jnp.sqrt(2 * jnp.pi))**(-1))**6
+    return lb.item()
+
 
 SAVE_DIR = "data/tail"
 Path(SAVE_DIR).mkdir(exist_ok=True, parents=True)
@@ -39,7 +49,7 @@ if __name__ == "__main__":
     parser.add_argument("--dim", type=int)
     parser.add_argument("--nrep", type=int)
     parser.add_argument("--bw", type=float, default=None)
-    parser.add_argument("--gen", type=bool, default=True)
+    parser.add_argument("--gen", type=bool, default=False)
     args = parser.parse_args()
 
     args.bw = "med" if args.bw is None else args.bw
@@ -105,12 +115,14 @@ if __name__ == "__main__":
     res = {}
         
     for dof in dof_ls:
-        tau = tau_res[dof]
-        theta = eps0 * tau**0.5
+        # tau = tau_res[dof]
+        # theta = eps0 * tau**0.5
 
         res[dof] = exp_utils.run_tests(
             samples=X_res[dof], scores=score_res[dof], hvps=None, hvp_denom_sup=None,
-            theta=theta, bw="med", alpha=0.05, verbose=True,
+            # theta=theta, 
+            bw="med", alpha=0.05, verbose=True,
+            compute_tau=True, eps0=eps0,
         )
 
     # 3. save results
