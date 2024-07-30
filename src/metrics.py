@@ -1,6 +1,5 @@
 import jax
 import jax.numpy as jnp
-import time
 import scipy.stats as sci_stats
 from numpy.random import multinomial
 import src.bootstrap as boot
@@ -400,10 +399,10 @@ class KSD(Metric):
 
         elif method == "boot_both":
             bootstrap = boot.WildBootstrap(self, ndraws=nboot)
-            boot_stats_nondegen, vstat = bootstrap.compute_bootstrap(X, X, score=score, degen=False)
-            boot_stats_nondegen = jnp.concatenate([boot_stats_nondegen, jnp.array([vstat])])
+            # boot_stats_nondegen, vstat = bootstrap.compute_bootstrap(X, X, score=score, degen=False)
+            # boot_stats_nondegen = jnp.concatenate([boot_stats_nondegen, jnp.array([vstat])])
             
-            boot_stats_degen, _ = bootstrap.compute_bootstrap(X, X, score=score, degen=True)
+            boot_stats_degen, vstat = bootstrap.compute_bootstrap(X, X, score=score, degen=True)
             boot_stats_degen = jnp.concatenate([boot_stats_degen, jnp.array([vstat])])
 
             # compute tau and theta
@@ -417,24 +416,27 @@ class KSD(Metric):
             # p-value for standard test
             pval_standard = jnp.mean(boot_stats_degen >= vstat)
 
-            # quantile for boot max
-            q_nondegen = jnp.percentile(boot_stats_nondegen - vstat, 100 * (1 - alpha))
-            q_degen = jnp.percentile(boot_stats_degen, 100 * (1 - alpha))
-            q_max = jnp.max(jnp.array([q_nondegen, q_degen]))
-            threshold_max = q_max + theta**2
-            # pval_max = max([
-            #     jnp.mean(boot_stats_degen >= vstat - self.theta**2), 
-            #     jnp.mean(boot_stats_nondegen >= vstat - self.theta**2)]
-            # )
+            # # quantile for boot max
+            # q_nondegen = jnp.percentile(boot_stats_nondegen - vstat, 100 * (1 - alpha))
+            # q_degen = jnp.percentile(boot_stats_degen, 100 * (1 - alpha))
+            # q_max = jnp.max(jnp.array([q_nondegen, q_degen]))
+            # threshold_max = q_max + theta**2
 
             # quantile for boot degen
             boot_stats_nonsq = boot_stats_degen**0.5
             q_degen_nonsq = jnp.percentile(boot_stats_nonsq, 100 * (1 - alpha))
             pval_degen = jnp.mean(boot_stats_nonsq >= vstat**0.5 - self.theta)
 
-            res = {"q_max": q_max, "q_degen_nonsq": q_degen_nonsq, "pval_standard": pval_standard, 
-                   "vstat": vstat, "pval_degen": pval_degen, "gram_mat": bootstrap.gram_mat,
-                   "theta": theta, "tau": tau,}
+            res = {
+                # "q_max": q_max, 
+                "q_degen_nonsq": q_degen_nonsq, 
+                "pval_standard": pval_standard, 
+                "vstat": vstat, 
+                "pval_degen": pval_degen, 
+                "gram_mat": bootstrap.gram_mat,
+                "theta": theta, 
+                "tau": tau,
+            }
 
             return res
 

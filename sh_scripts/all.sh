@@ -12,6 +12,10 @@ echo tail >> test.txt
 sh sh_scripts/tail.sh
 date >> test.txt
 
+echo kef >> test.txt
+sh sh_scripts/kef.sh
+date >> test.txt
+
 echo ol >> test.txt
 sh sh_scripts/ol.sh
 date >> test.txt

@@ -142,7 +142,7 @@ if __name__ == "__main__":
             # theta=theta, 
             bw=bw, alpha=0.05, verbose=True, base_kernel="IMQ", weight_fn_args=weight_fn_args,
             compute_tau=True, eps0=eps0, 
-            time=True
+            timetest=True
         )
 
     # 3. save results

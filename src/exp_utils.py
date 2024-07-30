@@ -12,23 +12,35 @@ import src.bootstrap as boot
 import src.ksdagg as src_ksdagg
 
 
-def change_theta(res, methods, theta, tau=None):
+def change_theta(res, methods, theta, eps0=None):
     """Given a dictionary of results, change the theta value and the test outcome.
     """
     thetas = jnp.array(theta)
     if thetas.shape == () or len(thetas) == 1:
         thetas = [thetas] * len(res["standard"]["stat"])
 
+    assert len(thetas) > 0, "Must provide at least one theta value"
+
     res["theta"] = thetas
     for mm in methods:
         res[mm]["theta"] = thetas
 
         if mm == "tilted_r_boot" or mm == "tilted_r_dev":
+            # print(mm, np.array([int(max(0, stat**0.5 - tt) > gam) for stat, gam, tt in zip(res[mm]["stat"], res[mm]["gamma"], thetas)]))
             res[mm]["rej"] = [int(max(0, stat**0.5 - tt) > gam) for stat, gam, tt in zip(res[mm]["stat"], res[mm]["gamma"], thetas)]
+
         elif mm == "tilted_r_bootmax":
             res[mm]["rej"] = [int(stat > gam**2 + tt**2) for stat, gam, tt in zip(res[mm]["stat"], res[mm]["gamma"], thetas)]
-        elif mm == "tilted_r_dev":
-            res[mm]["rej"] = [int(max(0, stat**0.5 - tt) > tau) for stat, tt in zip(res[mm]["stat"], thetas)]
+
+        elif mm == "devmmd":
+            tau_mmd = 2.
+            theta_mmd = eps0 * np.sqrt(tau_mmd)
+            res[mm]["rej"] = [int(nonsq_stat - theta_mmd > tt) for nonsq_stat, tt in zip(res[mm]["nonsq_mmd"], res[mm]["threshold"])]
+
+        elif mm == "dcmmd":
+            tau_mmd = 2.
+            theta_mmd = 2 * eps0 * np.sqrt(tau_mmd)
+            res[mm]["rej"] = [int(summary["MMD V-statistic"]**0.5 - theta_mmd > summary["MMD quantile"]) for summary in res[mm]["summary"]]
     
     return res
 
@@ -36,14 +48,14 @@ def run_tests(
         samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=None, alpha=0.05, verbose=False,
         weight_fn_args=None, base_kernel="IMQ", run_ksdagg=False, ksdagg_bw=None, run_dev=False, tau=None,
         run_devmmd=False, run_dcmmd=False, samples_p=None, key=2024,
-        compute_tau=False, time=False
+        compute_tau=False, timetest=False
     ):
     res = {
         "standard": {"nonsq_stat": [], "stat": [], "u_stat": [], "pval": [], "rej": [], "boot_stats": []},
-        "tilted": {"nonsq_stat": [], "stat": [], "u_stat": [], "pval": [], "rej": [], "boot_stats": [], "time": []},
-        "tilted_r_boot": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "pval": [], "tau": []},
-        "tilted_r_bootmax": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "tau": []},
-        "tilted_r_dev": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "tau": []},
+        "tilted": {"nonsq_stat": [], "stat": [], "u_stat": [], "pval": [], "rej": [], "boot_stats": []},
+        "tilted_r_boot": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "pval": [], "tau": [], "time": []},
+        "tilted_r_bootmax": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": []},
+        "tilted_r_dev": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": []},
     }
     res["theta"] = theta
 
@@ -82,7 +94,7 @@ def run_tests(
 
         X = samples[i]
         score = scores[i]
-        hvp = hvps[i] if hvps is not None else None
+        # hvp = hvps[i] if hvps is not None else None
         
         n = X.shape[-2]
         kernel_args = {"sigma_sq": None, "med_heuristic": True, "X": X, "Y": X} if bw == "med" else {"sigma_sq": 2*bw}
@@ -108,11 +120,18 @@ def run_tests(
 
         ksd = metrics.KSD(kernel)
         ustat = ksd(X, X, vstat=False, score=score)
+        if timetest:
+            time0 = time.time()
+        
         thresh_res = ksd.test_threshold(
             n=n, eps0=eps0, theta=theta, alpha=alpha, method="boot_both", X=X, score=score, 
             return_pval=True, compute_tau=compute_tau,
         )
-        q_max = thresh_res["q_max"]
+
+        if timetest:
+            res["tilted_r_boot"]["time"].append(time.time() - time0)
+        
+        # q_max = thresh_res["q_max"]
         q_degen_nonsq = thresh_res["q_degen_nonsq"]
         pval_standard = thresh_res["pval_standard"]
         vstat = thresh_res["vstat"]
@@ -125,10 +144,6 @@ def run_tests(
         res["tilted"]["u_stat"].append(ustat)
         res["tilted"]["pval"].append(pval_standard)
         res["tilted"]["rej"].append(int(pval_standard < alpha))
-        if time:
-            time0 = time.time()
-            _ = ksd(X, X, vstat=True, score=score)
-            res["tilted"]["time"] = time.time() - time0
         
         # 3. bootstrap degen
         res["tilted_r_boot"]["stat"].append(vstat)
@@ -141,15 +156,15 @@ def run_tests(
         res["tilted_r_boot"]["pval"].append(thresh_res["pval_degen"])
         res["tilted_r_boot"]["tau"].append(tau)
 
-        # 4. bootstrap
-        res["tilted_r_bootmax"]["stat"].append(vstat)
-        res["tilted_r_bootmax"]["nonsq_stat"].append(nonsq_stat)
-        res["tilted_r_bootmax"]["u_stat"].append(ustat)
-        res["tilted_r_bootmax"]["threshold"].append(q_max + theta**2)
-        res["tilted_r_bootmax"]["theta"].append(theta)
-        res["tilted_r_bootmax"]["gamma"].append(np.sqrt(q_max))
-        res["tilted_r_bootmax"]["rej"].append(int(vstat > q_max + theta**2))
-        res["tilted_r_bootmax"]["tau"].append(tau)
+        # # 4. bootstrap
+        # res["tilted_r_bootmax"]["stat"].append(vstat)
+        # res["tilted_r_bootmax"]["nonsq_stat"].append(nonsq_stat)
+        # res["tilted_r_bootmax"]["u_stat"].append(ustat)
+        # res["tilted_r_bootmax"]["threshold"].append(q_max + theta**2)
+        # res["tilted_r_bootmax"]["theta"].append(theta)
+        # res["tilted_r_bootmax"]["gamma"].append(np.sqrt(q_max))
+        # res["tilted_r_bootmax"]["rej"].append(int(vstat > q_max + theta**2))
+        # res["tilted_r_bootmax"]["tau"].append(tau)
 
         # 5. deviation
         if run_dev:

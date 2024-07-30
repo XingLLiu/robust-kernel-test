@@ -36,7 +36,7 @@ if __name__ == "__main__":
     mean_scale_ls = [1e-2, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 1., 2.]
     mean_ls = [np.eye(dim)[0, :] * ss for ss in mean_scale_ls]
     
-    
+
     # 1. generate data
     mean_model = np.zeros((dim,)) # model
     score_fn = lambda x: - (x - mean_model)
