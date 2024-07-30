@@ -35,7 +35,7 @@ class Bootstrap:
             return pval, test_stat, boot_stats
 
 
-class WildBootstrap(Bootstrap):
+class WeightedBootstrap(Bootstrap):
     """Efron's bootstrap, also known as weighted bootstrap
 
     Huskova and Janssen (1993). Consistency of the Generalized Bootstrap for Degenerate U-statistics.
@@ -49,7 +49,7 @@ class WildBootstrap(Bootstrap):
         self.divergence = divergence
         self.ndraws = ndraws
 
-    def compute_bootstrap(self, X, Y, score: jnp.ndarray = None, degen: bool = True):
+    def compute_bootstrap(self, X, Y, score: jnp.ndarray = None, degen: bool = True, wild: bool = False):
         """
         Compute bootstrapped statistics.
 
@@ -89,7 +89,7 @@ class RobustMMDTest(object):
         """
         self.mmd = mmd
         self.ndraws = ndraws
-        self.bootstrap = WildBootstrap(mmd, ndraws)
+        self.bootstrap = WeightedBootstrap(mmd, ndraws)
         self.eps0 = eps0
 
     def compute_radius(self, Y):
@@ -113,55 +113,3 @@ class RobustMMDTest(object):
         res = float(test_stat > threshold)
         return res
 
-
-class EfronBootstrap(Bootstrap):
-
-    def __init__(self, divergence, nboot: int = 1000):
-        """
-        :param mmd: MMD object
-        :param nboot: number of bootstrap draws
-        """
-        self.divergence = divergence
-        self.nboot = nboot
-
-    def compute_bootstrap(self, X, Y: jnp.ndarray = None, subsize: int = None):
-        """
-        Compute the threshold for the MMD test.
-
-        :param X: numpy array of shape (n, d)
-        :param Y: numpy array of shape (m, d). If not, one-sample testing is used.
-        """
-        assert len(X.shape) == 2, "X cannot be batched."
-        n = X.shape[-2]
-
-        # generate bootstrap samples
-        subsize = subsize if subsize is not None else n
-        idx = np.random.choice(n, size=(self.nboot, subsize), replace=True) # b, n
-        Xs = X[idx] # b, n, d
-        assert Xs.shape == (self.nboot, n, X.shape[-1]), f"Xs shape {Xs.shape} is wrong."
-
-        boot_stats = self.divergence.vstat_boot(X, idx)
-        
-        return boot_stats
-    
-    def compute_bootstrap_degenerate(self, X, Y, subsize: int = None):
-        """
-        Compute the threshold for the MMD test.
-
-        :param X: numpy array of shape (n, d)
-        :param Y: numpy array of shape (m, d). If not, one-sample testing is used.
-        """
-        assert len(X.shape) == 2, "X cannot be batched."
-        n = X.shape[-2]
-
-        # generate bootstrap samples
-        subsize = subsize if subsize is not None else n
-        idx = np.random.choice(n, size=(self.nboot, subsize), replace=True) # b, n
-        # idx = jnp.vstack([jnp.arange(n), idx]) # b, n # add the original sample
-        Xs = X[idx] # b, n, d
-        assert Xs.shape == (self.nboot, n, X.shape[-1]), "Xs shape is wrong."
-
-        # 1. vectorised
-        boot_stats = self.divergence.vstat_boot_degenerate(X, idx)
-
-        return boot_stats

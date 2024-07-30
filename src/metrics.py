@@ -179,7 +179,7 @@ class MMD(Metric):
             return threshold
 
         elif method == "bootstrap":
-            wild_boot = boot.WildBootstrap(self)
+            wild_boot = boot.WeightedBootstrap(self)
             # nsub = X.shape[0] // 2
             # boot_stats, test_stat = wild_boot.compute_bootstrap(X[:nsub], X[nsub:(2*nsub)])
 
@@ -375,7 +375,7 @@ class KSD(Metric):
             threshold = theta + gamma_n
 
         elif method == "boot":
-            bootstrap = boot.WildBootstrap(self, ndraws=nboot)
+            bootstrap = boot.WeightedBootstrap(self, ndraws=nboot)
             boot_stats_nondegen, vstat = bootstrap.compute_bootstrap(X, X, score=score, degen=False)
             boot_stats_degen, _ = bootstrap.compute_bootstrap(X, X, score=score, degen=True)
             threshold_nondegen = jnp.percentile(boot_stats_nondegen - vstat, 100 * (1 - alpha))
@@ -388,7 +388,7 @@ class KSD(Metric):
             # print("vstat_nonsq", vstat**0.5)
 
         elif method == "degen_boot":
-            bootstrap = boot.WildBootstrap(self, ndraws=nboot)
+            bootstrap = boot.WeightedBootstrap(self, ndraws=nboot)
             boot_stats_degen, vstat = bootstrap.compute_bootstrap(X, X, score=score, degen=True)
             boot_stats = jnp.concatenate([boot_stats_degen, jnp.array([vstat])])
             boot_stats_nonsq = boot_stats**0.5
@@ -398,7 +398,7 @@ class KSD(Metric):
                 pval = jnp.mean(boot_stats_nonsq >= vstat**0.5)
 
         elif method == "boot_both":
-            bootstrap = boot.WildBootstrap(self, ndraws=nboot)
+            bootstrap = boot.WeightedBootstrap(self, ndraws=nboot)
             # boot_stats_nondegen, vstat = bootstrap.compute_bootstrap(X, X, score=score, degen=False)
             # boot_stats_nondegen = jnp.concatenate([boot_stats_nondegen, jnp.array([vstat])])
             

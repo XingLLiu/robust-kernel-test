@@ -103,7 +103,7 @@ def run_tests(
         kernel = base_kernel_class(**kernel_args)
 
         ksd = metrics.KSD(kernel)
-        wild_boot = boot.WildBootstrap(ksd)
+        wild_boot = boot.WeightedBootstrap(ksd)
         pval, vstat, boot_stats = wild_boot.pval(X, return_stat=True, return_boot=True, score=score)
         ustat = ksd(X, X, vstat=False, score=score)
         res["standard"]["stat"].append(vstat)
