@@ -48,7 +48,7 @@ def run_tests(
         samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=None, alpha=0.05, verbose=False,
         weight_fn_args=None, base_kernel="IMQ", run_ksdagg=False, ksdagg_bw=None, run_dev=False, tau=None,
         run_devmmd=False, run_dcmmd=False, samples_p=None, key=2024,
-        compute_tau=False, timetest=False
+        compute_tau=False, timetest=False, wild=False
     ):
     res = {
         "standard": {"nonsq_stat": [], "stat": [], "u_stat": [], "pval": [], "rej": [], "boot_stats": []},
@@ -125,7 +125,7 @@ def run_tests(
         
         thresh_res = ksd.test_threshold(
             n=n, eps0=eps0, theta=theta, alpha=alpha, method="boot_both", X=X, score=score, 
-            return_pval=True, compute_tau=compute_tau,
+            return_pval=True, compute_tau=compute_tau, wild=wild
         )
 
         if timetest:
@@ -177,12 +177,9 @@ def run_tests(
             res["tilted_r_dev"]["theta"].append(theta)
             res["tilted_r_dev"]["gamma"].append(dev_threshold)
             res["tilted_r_dev"]["rej"].append(int(max(0, nonsq_stat - theta) > dev_threshold))
-            res["tilted_r_dev"]["tau"].append(tau)
 
         # 6. ksdagg
         if run_ksdagg:
-            # rej_ksdagg = src_ksdagg.ksdagg(X, score, kernel=base_kernel_class, weight_fn=weight_fn)
-            # rej_ksdagg, summary_ksdagg = src_ksdagg.ksdagg(X, score, kernel="imq", return_dictionary=True)
             rej_ksdagg, summary_ksdagg = src_ksdagg.ksdagg(X, score, bandwidths=ksdagg_bw, return_dictionary=True)
             res["ksdagg"]["rej"].append(rej_ksdagg.item())
             res["ksdagg"]["summary"].append(summary_ksdagg)

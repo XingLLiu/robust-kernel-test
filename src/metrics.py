@@ -348,7 +348,7 @@ class KSD(Metric):
     def test_threshold(
             self, n: int, eps0: float = None, theta: float = None, alpha: float = 0.05, method: str = "deviation",
             X: jnp.array = None, score=None, nboot: int = 500, return_pval: bool = False,
-            compute_tau: bool = True
+            compute_tau: bool = True, wild: bool = False,
         ):
         """
         Compute the threshold for the robust test. Threshold = \gamma + \theta.
@@ -402,7 +402,7 @@ class KSD(Metric):
             # boot_stats_nondegen, vstat = bootstrap.compute_bootstrap(X, X, score=score, degen=False)
             # boot_stats_nondegen = jnp.concatenate([boot_stats_nondegen, jnp.array([vstat])])
             
-            boot_stats_degen, vstat = bootstrap.compute_bootstrap(X, X, score=score, degen=True)
+            boot_stats_degen, vstat = bootstrap.compute_bootstrap(X, X, score=score, degen=True, wild=wild)
             boot_stats_degen = jnp.concatenate([boot_stats_degen, jnp.array([vstat])])
 
             # compute tau and theta

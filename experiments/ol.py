@@ -47,6 +47,7 @@ if __name__ == "__main__":
     parser.add_argument("--gen", type=bool, default=False)
     parser.add_argument("--run_ksdagg", type=bool, default=False)
     parser.add_argument("--run_lq", type=bool, default=False)
+    parser.add_argument("--wild", type=bool, default=False)
     args = parser.parse_args()
 
     args.bw = "med" if args.bw is None else args.bw
@@ -139,11 +140,9 @@ if __name__ == "__main__":
         
         res_ms[ol] = {}
         for eps in eps_ls:
-            # tau = tau_res[ol][eps]
-            # theta = eps0 * tau**0.5
-
+            
             if args.run_lq == False:
-                suffix = ""
+                suffix = "" if not args.wild else "_wild"
                 res_ms[ol][eps] = exp_utils.run_tests(
                     samples=X_res[ol][eps], scores=score_res[ol][eps], 
                     hvps=None, hvp_denom_sup=None, 
@@ -153,7 +152,7 @@ if __name__ == "__main__":
                     run_dev=True, 
                     run_dcmmd=True, samples_p=X_model_res[ol][eps], 
                     run_devmmd=True,
-                    compute_tau=True, eps0=eps0,
+                    compute_tau=True, eps0=eps0, wild=args.wild,
                 )
             
             else:
