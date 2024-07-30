@@ -3,7 +3,6 @@ import jax.numpy as jnp
 import scipy.stats as sci_stats
 from numpy.random import multinomial
 import src.bootstrap as boot
-import src.kernels as kernels
 
 
 class Metric:
@@ -346,104 +345,53 @@ class KSD(Metric):
         return jnp.sqrt(tau / n) + jnp.sqrt(- 2 * tau * (jnp.log(alpha)) / n)
 
     def test_threshold(
-            self, n: int, eps0: float = None, theta: float = None, alpha: float = 0.05, method: str = "deviation",
-            X: jnp.array = None, score=None, nboot: int = 500, return_pval: bool = False,
-            compute_tau: bool = True, wild: bool = False,
+            self, 
+            X: jnp.array,
+            score: jnp.array, 
+            eps0: float = None, 
+            theta: float = None, 
+            alpha: float = 0.05, 
+            nboot: int = 500,
+            compute_tau: bool = True, 
+            wild: bool = False,
         ):
         """
         Compute the threshold for the robust test. Threshold = \gamma + \theta.
         """
+        # compute bootstrap quantile
+        bootstrap = boot.WeightedBootstrap(self, ndraws=nboot)
+        
+        boot_stats_degen, vstat = bootstrap.compute_bootstrap(X, X, score=score, degen=True, wild=wild)
+        boot_stats_degen = jnp.concatenate([boot_stats_degen, jnp.array([vstat])])
 
-        # set theta
-        # if theta == "ol":
-        #     assert tau is not None
-        #     assert eps0 is not None
-        #     theta = eps0 * tau**0.5
+        # compute tau and theta
+        if compute_tau:
+            assert eps0 is not None, "eps0 must be provided to compute theta."
+            tau = jnp.max(bootstrap.gram_mat)
+            theta = eps0 * tau**0.5
+            self.tau = tau
         
         self.theta = theta
 
-        # compute threshold
-        if method == "deviation":
-            # # 1. threshold for standard KSD (scale might be wrong)
-            # threshold = tau / n + jnp.sqrt(- 2 * tau**2 * jnp.log(alpha) / n)
-            
-            # 2. threshold for (non-squared) P-KSD
-            threshold = jnp.sqrt(tau / n) + jnp.sqrt(- 2 * tau * (jnp.log(alpha)) / n)
+        # p-value for standard test
+        pval_standard = jnp.mean(boot_stats_degen >= vstat)
 
-        elif method == "ball_robust":
-            gamma_n = self.compute_deviation_threshold(n, tau, alpha)
-            threshold = theta + gamma_n
+        # quantile for boot degen
+        boot_stats_nonsq = boot_stats_degen**0.5
+        q_degen_nonsq = jnp.percentile(boot_stats_nonsq, 100 * (1 - alpha))
+        pval_degen = jnp.mean(boot_stats_nonsq >= vstat**0.5 - self.theta)
 
-        elif method == "boot":
-            bootstrap = boot.WeightedBootstrap(self, ndraws=nboot)
-            boot_stats_nondegen, vstat = bootstrap.compute_bootstrap(X, X, score=score, degen=False)
-            boot_stats_degen, _ = bootstrap.compute_bootstrap(X, X, score=score, degen=True)
-            threshold_nondegen = jnp.percentile(boot_stats_nondegen - vstat, 100 * (1 - alpha))
-            threshold_degen = jnp.percentile(boot_stats_degen, 100 * (1 - alpha))
-            # print("threshold_degen", threshold_degen**0.5)
-            threshold_max = jnp.max(jnp.array([threshold_nondegen, threshold_degen]))
-            # print("threshold_max**0.5", threshold_max**0.5)
-            threshold = threshold_max + theta**2
-            # print("threshold", threshold)
-            # print("vstat_nonsq", vstat**0.5)
+        res = {
+            "q_degen_nonsq": q_degen_nonsq, 
+            "pval_standard": pval_standard, 
+            "vstat": vstat, 
+            "pval_degen": pval_degen, 
+            "gram_mat": bootstrap.gram_mat,
+            "theta": theta, 
+            "tau": tau,
+        }
 
-        elif method == "degen_boot":
-            bootstrap = boot.WeightedBootstrap(self, ndraws=nboot)
-            boot_stats_degen, vstat = bootstrap.compute_bootstrap(X, X, score=score, degen=True)
-            boot_stats = jnp.concatenate([boot_stats_degen, jnp.array([vstat])])
-            boot_stats_nonsq = boot_stats**0.5
-            threshold = jnp.percentile(boot_stats_nonsq, 100 * (1 - alpha))
-
-            if return_pval:
-                pval = jnp.mean(boot_stats_nonsq >= vstat**0.5)
-
-        elif method == "boot_both":
-            bootstrap = boot.WeightedBootstrap(self, ndraws=nboot)
-            # boot_stats_nondegen, vstat = bootstrap.compute_bootstrap(X, X, score=score, degen=False)
-            # boot_stats_nondegen = jnp.concatenate([boot_stats_nondegen, jnp.array([vstat])])
-            
-            boot_stats_degen, vstat = bootstrap.compute_bootstrap(X, X, score=score, degen=True, wild=wild)
-            boot_stats_degen = jnp.concatenate([boot_stats_degen, jnp.array([vstat])])
-
-            # compute tau and theta
-            if compute_tau:
-                assert eps0 is not None
-                tau = jnp.max(bootstrap.gram_mat)
-                theta = eps0 * tau**0.5
-                self.theta = theta
-                self.tau = tau
-
-            # p-value for standard test
-            pval_standard = jnp.mean(boot_stats_degen >= vstat)
-
-            # # quantile for boot max
-            # q_nondegen = jnp.percentile(boot_stats_nondegen - vstat, 100 * (1 - alpha))
-            # q_degen = jnp.percentile(boot_stats_degen, 100 * (1 - alpha))
-            # q_max = jnp.max(jnp.array([q_nondegen, q_degen]))
-            # threshold_max = q_max + theta**2
-
-            # quantile for boot degen
-            boot_stats_nonsq = boot_stats_degen**0.5
-            q_degen_nonsq = jnp.percentile(boot_stats_nonsq, 100 * (1 - alpha))
-            pval_degen = jnp.mean(boot_stats_nonsq >= vstat**0.5 - self.theta)
-
-            res = {
-                # "q_max": q_max, 
-                "q_degen_nonsq": q_degen_nonsq, 
-                "pval_standard": pval_standard, 
-                "vstat": vstat, 
-                "pval_degen": pval_degen, 
-                "gram_mat": bootstrap.gram_mat,
-                "theta": theta, 
-                "tau": tau,
-            }
-
-            return res
-
-        if return_pval:
-            return threshold, pval
-        
-        return threshold
+        return res
 
     def jackknife(self, X, score=None, hvp=None):
         n = X.shape[-2]

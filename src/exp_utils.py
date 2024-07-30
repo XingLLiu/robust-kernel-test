@@ -124,8 +124,8 @@ def run_tests(
             time0 = time.time()
         
         thresh_res = ksd.test_threshold(
-            n=n, eps0=eps0, theta=theta, alpha=alpha, method="boot_both", X=X, score=score, 
-            return_pval=True, compute_tau=compute_tau, wild=wild
+            eps0=eps0, theta=theta, alpha=alpha, X=X, score=score, 
+            compute_tau=compute_tau, wild=wild
         )
 
         if timetest:
