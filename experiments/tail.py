@@ -4,40 +4,51 @@ import jax
 import pickle
 import os
 from tqdm import tqdm
+import scipy
+from scipy.optimize import minimize as sci_minimize
 
 import src.metrics as metrics
 import src.kernels as kernels
 import src.exp_utils as exp_utils
-from experiments.rbm import parallel_optimize
 
 from pathlib import Path
 import argparse
 
 
-def t_pdf_multivariate_single(x, df, scale):
+def t_pdf_multivariate_single(x, df):
     d = x.shape[-1]
-    t_pdf = lambda j: jax.scipy.stats.t.pdf(x[j], df, scale=scale)
+    # t_pdf = lambda j: jax.scipy.stats.t.pdf(x[j], df, scale=scale)
+    t_pdf = lambda j: jax.scipy.stats.t.pdf(x[j], df)
     return jnp.sum(jax.vmap(t_pdf)(jnp.arange(d, dtype=jnp.int32)))
 
 def t_pdf_multivariate(X, df):
-    scale = jnp.sqrt((df - 2) / df)
-    single_den = lambda x: t_pdf_multivariate_single(x, df, scale)
+    # scale = jnp.sqrt((df - 2) / df)
+    # single_den = lambda x: t_pdf_multivariate_single(x, df, scale)
+    single_den = lambda x: t_pdf_multivariate_single(x, df)
     return jax.vmap(single_den)(X)
 
 def t_score_fn(X, df):
-    scale = jnp.sqrt((df - 2) / df)
-    t_pdf_multivariate_fn = lambda x: t_pdf_multivariate(x, df, scale)
+    # scale = jnp.sqrt((df - 2) / df)
+    # t_pdf_multivariate_fn = lambda x: t_pdf_multivariate(x, df, scale)
+    t_pdf_multivariate_fn = lambda x: t_pdf_multivariate(x, df)
     return jax.vmap(jax.grad(t_pdf_multivariate_fn))(X)
 
-def compute_nu_threshold(theta, tau):
-    """Compute lower bound for degree-of-freedom nu so that 
-    \KSD(t_\nu, P) = \theta + o(1), where P = \cN(0, 1).
-    """
-    # lb = tau**(7/4) / theta**(7/2) * ((10 * jnp.sqrt(2 * jnp.pi))**(-1) + 1)**(7/2)
-    delta0 = tau**0.5 / theta
-    # print(delta0 * (10 * jnp.sqrt(2 * jnp.pi))**(-1))
-    lb = (delta0 * (2 * jnp.sqrt(2 * jnp.pi))**(-1))**6
-    return lb.item()
+# def compute_nu_threshold(theta, tau):
+#     """Compute lower bound for degree-of-freedom nu so that 
+#     \KSD(t_\nu, P) = \theta + o(1), where P = \cN(0, 1).
+#     """
+#     delta0 = tau**0.5 / theta
+#     lb = (delta0 * (2 * jnp.sqrt(2 * jnp.pi))**(-1))**6
+#     return lb.item()
+
+def compute_theta_fat_tail(nu, tau, init_val=1.):
+    normal_pdf = lambda x: scipy.stats.norm.pdf(x)
+    t_pdf = lambda x: scipy.stats.t.pdf(x, nu)
+    summary = sci_minimize(lambda x: normal_pdf(x) - t_pdf(x), init_val, method="BFGS")
+    intersection = summary.x[0]
+    diff = scipy.stats.norm.cdf(intersection) - scipy.stats.t.cdf(intersection, nu)
+    theta = 4 * tau**0.5 * diff
+    return theta
 
 
 SAVE_DIR = "data/tail"
@@ -71,8 +82,7 @@ if __name__ == "__main__":
         tau_res = {}
 
         for dof in tqdm(dof_ls):
-            scale = jnp.sqrt((dof - 2) / dof)
-            Xs = np.random.standard_t(df=dof, size=(args.nrep, args.n, dim)) * scale
+            Xs = np.random.standard_t(df=dof, size=(args.nrep, args.n, dim))
             assert Xs.shape == (args.nrep, args.n, dim)
 
             X_res[dof] = Xs
@@ -87,23 +97,18 @@ if __name__ == "__main__":
             kernel0 = kernels.IMQ(med_heuristic=True, X=X, Y=X)
             kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
             ksd = metrics.KSD(kernel, score_fn=score_fn)
-        
-            opt_res = parallel_optimize(Xs[0, :20], ksd, maxiter=500)
-            tau = jnp.max(-opt_res)
-            tau_res[dof] = tau
-            print("tau", tau)
 
         # save data
         pickle.dump(X_res, open(os.path.join(SAVE_DIR, f"X_res_n{args.n}_d{dim}.pkl"), "wb"))
         pickle.dump(score_res, open(os.path.join(SAVE_DIR, f"score_res_n{args.n}_d{dim}.pkl"), "wb"))
-        pickle.dump(tau_res, open(os.path.join(SAVE_DIR, f"tau_d{dim}.pkl"), "wb"))
+        # pickle.dump(tau_res, open(os.path.join(SAVE_DIR, f"tau_d{dim}.pkl"), "wb"))
 
         print("Saved to", SAVE_DIR)
 
     else:
         X_res = pickle.load(open(os.path.join(SAVE_DIR, f"X_res_n{args.n}_d{dim}.pkl"), "rb"))
         score_res = pickle.load(open(os.path.join(SAVE_DIR, f"score_res_n{args.n}_d{dim}.pkl"), "rb"))
-        tau_res = pickle.load(open(os.path.join(SAVE_DIR, f"tau_d{dim}.pkl"), "rb"))
+        # tau_res = pickle.load(open(os.path.join(SAVE_DIR, f"tau_d{dim}.pkl"), "rb"))
 
         X_res = {kk: xx[:, :args.n, :] for kk, xx in X_res.items()}
         score_res = {kk: xx[:, :args.n, :] for kk, xx in score_res.items()}

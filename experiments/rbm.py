@@ -50,7 +50,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
 
-    eps_ls = [0., 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.]
+    # eps_ls = [0., 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.]
+    eps_ls = jnp.linspace(0., 1., 21)
 
     # 1. generate data
     if args.gen:
@@ -73,7 +74,8 @@ if __name__ == "__main__":
         time_sample = np.empty((args.nrep,))
         for i in trange(args.nrep):
             time0 = time.time()
-            X = rbm_sampler.sample(args.n, seed=nrep_seed[i, 1]).data()
+            X = rbm_sampler.sample(args.n*10, seed=nrep_seed[i, 1]).data()
+            X = X[::10] # thinning
             Xs_raw = Xs_raw.at[i].set(X)
             time_sample[i] = time.time() - time0
 
@@ -83,7 +85,7 @@ if __name__ == "__main__":
         tau_res = {}
         ol_res = {}
         for eps in eps_ls:
-            print("eps:", eps) 
+            print("eps:", eps)
             Xs = copy.deepcopy(Xs_raw)
             scores = jnp.empty((args.nrep, args.n, args.dim))
             ols = []
@@ -99,17 +101,6 @@ if __name__ == "__main__":
             Xs_res[eps] = Xs
             scores_res[eps] = scores
             ol_res[eps] = ols
-
-            # # find tau
-            # score_weight_fn = kernels.PolyWeightFunction(loc=jnp.zeros((args.dim,)))
-            # kernel0 = kernels.IMQ(med_heuristic=True, X=X, Y=X)
-            # kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
-            # ksd = metrics.KSD(kernel, score_fn=rbm_model.grad_log)
-        
-            # opt_res = parallel_optimize(Xs[0, :20], ksd, maxiter=500)
-            # tau = jnp.max(-opt_res)
-            # tau_res[eps] = tau
-            # print("tau", tau)
 
         # save data
         pickle.dump(Xs_res, open(os.path.join(SAVE_DIR, f"X_res_n{args.n}_seed{args.seed}.pkl"), "wb"))
