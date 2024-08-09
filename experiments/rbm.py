@@ -9,10 +9,7 @@ import copy
 import time
 
 
-import src.metrics as metrics
-import src.kernels as kernels
 import src.exp_utils as exp_utils
-from experiments.efm import ExpFamilyModel, sample_outlier_contam
 import experiments.efm as exp_efm
 
 from kgof import data as kgof_data
@@ -34,10 +31,6 @@ def optimize(init_val, fn, maxiter):
     opt_res = solver.run(init_val.reshape(1, -1))
     return opt_res.state.value
 
-def parallel_optimize(init_vals, fn, maxiter):
-    res = jax.vmap(lambda x: optimize(x, fn, maxiter))(init_vals)
-    return res
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -51,8 +44,8 @@ if __name__ == "__main__":
 
 
     # eps_ls = [0., 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.]
-    eps_ls = jnp.linspace(0., 1., 21)
-
+    eps_ls = [0.05 * i for i in range(21)]
+    
     # 1. generate data
     if args.gen:
         key = jax.random.key(args.seed)
@@ -105,7 +98,6 @@ if __name__ == "__main__":
         # save data
         pickle.dump(Xs_res, open(os.path.join(SAVE_DIR, f"X_res_n{args.n}_seed{args.seed}.pkl"), "wb"))
         pickle.dump(scores_res, open(os.path.join(SAVE_DIR, f"score_res_n{args.n}_seed{args.seed}.pkl"), "wb"))
-        # pickle.dump(tau_res, open(os.path.join(SAVE_DIR, f"tau_n{args.n}_seed{args.seed}.pkl"), "wb"))
         pickle.dump(ol_res, open(os.path.join(SAVE_DIR, f"ol_res_n{args.n}_seed{args.seed}.pkl"), "wb"))
         pickle.dump(time_sample, open(os.path.join(SAVE_DIR, f"time_sample_n{args.n}_seed{args.seed}.pkl"), "wb"))
 
@@ -113,7 +105,6 @@ if __name__ == "__main__":
     # 2. run test
     X_res = pickle.load(open(os.path.join(SAVE_DIR, f"X_res_n{args.n}_seed{args.seed}.pkl"), "rb"))
     score_res = pickle.load(open(os.path.join(SAVE_DIR, f"score_res_n{args.n}_seed{args.seed}.pkl"), "rb"))
-    # tau_res = pickle.load(open(os.path.join(SAVE_DIR, f"tau_n{args.n}_seed{args.seed}.pkl"), "rb"))
 
     print("start testing")
     bw = "med"
@@ -125,8 +116,6 @@ if __name__ == "__main__":
         print("eps:", eps)
         Xs = X_res[eps]
         scores = score_res[eps]
-        # tau = tau_res[eps]
-        # theta = eps0 * tau**0.5
 
         res[eps] = exp_utils.run_tests(
             samples=Xs, scores=scores, hvps=None, hvp_denom_sup=None, 

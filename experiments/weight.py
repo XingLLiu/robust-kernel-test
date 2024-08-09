@@ -1,12 +1,8 @@
 import numpy as np
-import jax.numpy as jnp
 import jax
 import pickle
 import os
-from tqdm import tqdm
 
-import src.metrics as metrics
-import src.kernels as kernels
 import src.exp_utils as exp_utils
 from experiments.ol import sample_outlier_contam
 
@@ -38,7 +34,6 @@ if __name__ == "__main__":
     ol = np.eye(dim)[0, :] * ol
 
     eps_ls = [0., 0.01, 0.05, 0.075, 0.1, 0.125, 0.15, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.]
-    # eps_ls = [0., 0.01, 0.05, 0.075, 0.1]
 
     b_ls = [0.25, 0.5, 1.]
     
@@ -67,14 +62,12 @@ if __name__ == "__main__":
         # save data
         pickle.dump(X_res, open(os.path.join(SAVE_DIR, f"X_res_n{args.n}_d{dim}.pkl"), "wb"))
         pickle.dump(score_res, open(os.path.join(SAVE_DIR, f"score_res_n{args.n}_d{dim}.pkl"), "wb"))
-        # pickle.dump(tau_res, open(os.path.join(SAVE_DIR, f"tau_n{args.n}_seed{args.seed}.pkl"), "wb"))
 
         print("Saved to", SAVE_DIR)
 
     else:
         X_res = pickle.load(open(os.path.join(SAVE_DIR, f"X_res_n{args.n}_d{dim}.pkl"), "rb"))
         score_res = pickle.load(open(os.path.join(SAVE_DIR, f"score_res_n{args.n}_d{dim}.pkl"), "rb"))
-        # tau_res = pickle.load(open(os.path.join(SAVE_DIR, f"tau_n{args.n}_seed{args.seed}.pkl"), "rb"))
 
         X_res = {kk: xx[:, :args.n, :] for kk, xx in X_res.items()}
         score_res = {kk: xx[:, :args.n, :] for kk, xx in score_res.items()}

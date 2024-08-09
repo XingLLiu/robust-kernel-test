@@ -7,15 +7,65 @@ from tqdm import trange
 import rdata
 
 
-import src.metrics as metrics
 import src.kernels as kernels
 import src.exp_utils as exp_utils
-from experiments.efm import ExpFamilyModel, sample_outlier_contam
-from experiments.rbm import parallel_optimize
 
 from pathlib import Path
 import argparse
 
+
+class ExpFamilyModel(object):
+    def __init__(self, params: jnp.ndarray):
+        self.params = params
+
+    def log_unnormalised_density(self, x):
+        raise NotImplementedError
+    
+    def t(self, x):
+        raise NotImplementedError
+    
+    def b(self, x):
+        raise NotImplementedError
+    
+    def _compute_grads(self, x):
+        raise NotImplementedError
+
+    def sm_est(self, x):
+        JT, grad_b, lap_T = self._compute_grads(x)
+
+        # compute minimum SM estimator
+        JTJT = jnp.matmul(JT, jnp.transpose(JT, (0, 2, 1))) # n, r, r
+        JT_gradb = jnp.matmul(JT, jnp.expand_dims(grad_b, -1)) # n, r, 1
+        JT_gradb = jnp.squeeze(JT_gradb, -1) # n, r
+        res = - jnp.linalg.solve(
+            jnp.mean(JTJT, 0),
+            jnp.mean(JT_gradb + lap_T, 0),
+        )
+        return res
+    
+    def ksd_est(self, x, kernel):
+        JT, grad_b, _ = self._compute_grads(x)
+        
+        # compute minimum DKSD estimator
+        K = kernel(x, x) # n, n
+        grad1_K = kernel.grad_first(x, x) # n, n, d
+        grad2_K = kernel.grad_second(x, x) # n, n, d
+        
+        JT_K = JT[:, jnp.newaxis] * K[..., jnp.newaxis, jnp.newaxis] # n, n, r, d
+        JT_K_JT = jnp.matmul(JT_K, jnp.transpose(JT[jnp.newaxis, :], (0, 1, 3, 2))) # n, n, r, r
+        
+        JT_K_gradb = JT_K * grad_b[jnp.newaxis, :, jnp.newaxis, :] # n, n, r, d
+        JT_K_gradb = jnp.sum(JT_K_gradb, -1) # n, n, r
+
+        JT_grad2_K = jnp.sum(JT[:, jnp.newaxis] * grad2_K[:, :, jnp.newaxis], -1) # n, n, r
+
+        grad1_K_JT = jnp.sum(JT[jnp.newaxis, ...] * grad1_K[:, :, jnp.newaxis], -1) # n, n, r
+
+        term1 = jnp.mean(JT_K_JT, [0, 1]) # r, r
+        # add jitter for numerical stability as per Key at al., 2023
+        term1 = term1 + jnp.eye(term1.shape[0]) * 1e-4
+        term2 = jnp.mean(2 * JT_K_gradb + JT_grad2_K + grad1_K_JT, [0, 1]) # r, r
+        return jnp.linalg.solve(term1, -0.5 * term2)
 
 class NormalLocModel(ExpFamilyModel):
     def __init__(self, params):
@@ -129,7 +179,6 @@ def load_galaxies(path: str):
 
     location = unnormalized.mean()
     scale = 0.5 * unnormalized.std()
-    # scale = unnormalized.std() #!
     normalized = (unnormalized - location) / scale
 
     def unnormalize(x: np.ndarray) -> np.ndarray:
@@ -178,26 +227,22 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int)
     parser.add_argument("--nrep", type=int)
-    # parser.add_argument("--bw", type=float, default=None)
     parser.add_argument("--gen", type=str)
     parser.add_argument("--data", type=str)
     parser.add_argument("--exp", type=str)
     args = parser.parse_args()
-
-    # args.bw = "med" if args.bw is None else args.bw
 
     # 1. generate data
     if args.data == "galaxy":
         galaxy_data, _ = load_galaxies("data/kef/galaxies.rda")
         n = galaxy_data.shape[0]
         ntest = int(.5 * n)
-        # ntest = int(.4 * n)
     else:
         n = 100
         ntest = 100
 
     if args.exp == "level":
-        # level experiments
+        # level experiment
         eps_ls = [0., 0.05, 0.1, 0.2]
         ol_mean_ls = [0., 1., 5., 10., 15., 20., 30.]
         L = 25
@@ -205,16 +250,7 @@ if __name__ == "__main__":
         ol_type = "normal"
 
     elif args.exp == "power":
-        # power experiments
-        eps_ls = [0., 0.1, 0.2]
-        ol_mean_ls = [0.]
-        L = 1
-        ol_mean = 0.
-        ol_std = .1
-        ol_type = "normal"
-
-    elif args.exp == "power2":
-        # power experiments
+        # power experiment
         L = 25
         param_ls = [0., .5, 1., 2.]
 
@@ -250,11 +286,9 @@ if __name__ == "__main__":
                         # generate data
                         idx = idx_ls[i]
                         X_train = galaxy_data[jnp.array([i for i in range(n) if i not in idx], dtype=jnp.int32)]
-                        # X_train = sample_outlier_contam(X_train, eps=eps, ol_mean=ol_mean, ol_std=ol_std)
                         X_train = add_outlier(X_train, eps=eps, ol_mean=ol_mean, ol_std=ol_std)
 
                         X_test = galaxy_data[idx]
-                        # X_test = sample_outlier_contam(X_test, eps=eps, ol_mean=ol_mean, ol_std=ol_std)
                         X_test = add_outlier(X_test, eps=eps, ol_mean=ol_mean, ol_std=ol_std)
                         Xtest_ls.append(X_test)
 
@@ -262,10 +296,9 @@ if __name__ == "__main__":
                         kef = KernelExpFamily(params=None, bw=kef_l, L=L, p0_loc=0., p0_scale=kef_p0_std)
 
                         poly_weight_fn = kernels.PolyWeightFunction(a=1.)
-                        # kernel0 = kernels.IMQ(sigma_sq=2*1.**2, X=None, Y=None)
                         kernel0 = kernels.SumKernel(
                             [kernels.IMQ(sigma_sq=2*l, X=None, Y=None) for l in [0.6, 1., 1.2]]
-                        ) #!
+                        )
                         kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=poly_weight_fn)
                         est_params = kef.ksd_est(X_train, kernel)
 
@@ -276,25 +309,11 @@ if __name__ == "__main__":
                         score_ls.append(score)
 
                         # save estimated densities
-                        # X_plot = np.reshape(np.linspace(-10., 10., 1001), (-1, 1))
-                        # approx_prob = trained_kef_model.approx_prob(args.seed, xs=X_plot, n_samples=2000)
                         est_params_ls.append(est_params)
                     
                     Xtest_res[eps][ol_mean] = jnp.stack(Xtest_ls, 0)
                     score_res[eps][ol_mean] = jnp.stack(score_ls, 0)
                     est_params_res[eps][ol_mean] = jnp.stack(est_params_ls, 0)
-
-                    # # find tau
-                    # score_weight_fn = kernels.PolyWeightFunction()
-                    # kernel0 = kernels.IMQ(sigma_sq=2*1.**2)
-                    # kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
-                    # ksd = metrics.KSD(kernel, score_fn=lambda X: jax.vmap(trained_kef_model.score)(X))
-                
-                    # opt_res = parallel_optimize(Xtest_ls[0][:20], ksd, maxiter=500)
-                    # tau = jnp.max(-opt_res)
-
-                    # tau_res[eps][ol_mean] = tau
-                    # print("tau", tau)
 
         elif args.exp == "power2":
             for param in param_ls:
@@ -314,10 +333,9 @@ if __name__ == "__main__":
                     kef = KernelExpFamily(params=None, bw=kef_l, L=L, p0_loc=0., p0_scale=kef_p0_std)
 
                     poly_weight_fn = kernels.PolyWeightFunction(a=1.)
-                    # kernel0 = kernels.IMQ(sigma_sq=2*1.**2, X=None, Y=None)
                     kernel0 = kernels.SumKernel(
                         [kernels.IMQ(sigma_sq=2*l, X=None, Y=None) for l in [0.6, 1., 1.2]]
-                    ) #!
+                    )
                     kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=poly_weight_fn)
                     est_params = kef.ksd_est(X_train, kernel)
                     est_params += param
@@ -329,46 +347,28 @@ if __name__ == "__main__":
                     score_ls.append(score)
 
                     # save estimated densities
-                    # X_plot = np.reshape(np.linspace(-10., 10., 1001), (-1, 1))
-                    # approx_prob = trained_kef_model.approx_prob(args.seed, xs=X_plot, n_samples=2000)
                     est_params_ls.append(est_params)
                 
                 Xtest_res[param] = jnp.stack(Xtest_ls, 0)
                 score_res[param] = jnp.stack(score_ls, 0)
                 est_params_res[param] = jnp.stack(est_params_ls, 0)
 
-                # # find tau
-                # score_weight_fn = kernels.PolyWeightFunction()
-                # kernel0 = kernels.IMQ(sigma_sq=2*1.**2)
-                # kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
-                # ksd = metrics.KSD(kernel, score_fn=lambda X: jax.vmap(trained_kef_model.score)(X))
-            
-                # opt_res = parallel_optimize(Xtest_ls[0][:20], ksd, maxiter=500)
-                # tau = jnp.max(-opt_res)
-
-                # tau_res[param] = tau
-                # print("tau", tau)
-
-
         # save data
         pickle.dump(Xtest_res, open(os.path.join(SAVE_DIR, f"kef_{args.data}_{args.exp}_X_res_seed{args.seed}.pkl"), "wb"))
         pickle.dump(score_res, open(os.path.join(SAVE_DIR, f"kef_{args.data}_{args.exp}_score_res_seed{args.seed}.pkl"), "wb"))
-        # pickle.dump(tau_res, open(os.path.join(SAVE_DIR, f"kef_{args.data}_{args.exp}_tau.pkl"), "wb"))
         pickle.dump(est_params_res, open(os.path.join(SAVE_DIR, f"kef_{args.data}_{args.exp}_est_params_res_seed{args.seed}.pkl"), "wb"))
 
 
     # 2. test
     X_res = pickle.load(open(os.path.join(SAVE_DIR, f"kef_{args.data}_{args.exp}_X_res_seed{args.seed}.pkl"), "rb"))
     score_res = pickle.load(open(os.path.join(SAVE_DIR, f"kef_{args.data}_{args.exp}_score_res_seed{args.seed}.pkl"), "rb"))
-    # tau_res = pickle.load(open(os.path.join(SAVE_DIR, f"kef_{args.data}_{args.exp}_tau.pkl"), "rb"))
 
     print("start testing")
     bw = 2.*1**2
-    # bw = "med"
     eps0 = .2
     res = {}
 
-    if args.exp == "level" or args.exp == "power":
+    if args.exp == "level":
         eps_ls = list(X_res.keys())
         ol_mean_ls = list(X_res[eps_ls[0]].keys())
         for eps in eps_ls:
@@ -376,25 +376,21 @@ if __name__ == "__main__":
             for ol_mean in ol_mean_ls:
                 Xs = X_res[eps][ol_mean]
                 scores = score_res[eps][ol_mean]
-                # theta = eps0 * tau_res[eps][ol_mean]**0.5
 
                 res[eps][ol_mean] = exp_utils.run_tests(
                     samples=Xs, scores=scores, hvps=None, hvp_denom_sup=None, 
-                    # theta=theta, 
                     bw=bw, alpha=0.05, verbose=True, base_kernel="IMQ", weight_fn_args=None,
                     compute_tau=True, eps0=eps0,    
                 )
 
-    elif args.exp == "power2":
+    elif args.exp == "power":
         param_ls = list(X_res.keys())
         for param in param_ls:
             Xs = X_res[param]
             scores = score_res[param]
-            # theta = eps0 * tau_res[param]**0.5
 
             res[param] = exp_utils.run_tests(
                 samples=Xs, scores=scores, hvps=None, hvp_denom_sup=None, 
-                # theta=theta, 
                 bw=bw, alpha=0.05, verbose=True, base_kernel="IMQ", weight_fn_args=None,
                 compute_tau=True, eps0=eps0,
             )

@@ -1,15 +1,9 @@
 import numpy as np
-import jax.numpy as jnp
 import jax
 import pickle
 import os
-from tqdm import tqdm
-import lqrt
 
-import src.metrics as metrics
-import src.kernels as kernels
 import src.exp_utils as exp_utils
-from experiments.rbm import parallel_optimize
 import experiments.efm as exp_efm
 
 from pathlib import Path

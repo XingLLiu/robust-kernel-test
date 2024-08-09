@@ -44,7 +44,6 @@ if __name__ == "__main__":
 
     bandwidth_ls = ["med", 1e-2, 1e-1, 1., 10., 100.]
     ksdagg_bw = jnp.sqrt(2 * jnp.array(bandwidth_ls[1:]))
-    # ksdagg_bw = jnp.sqrt(2 * jnp.array([1.])) #!
 
     # 1. generate data
     mean_data = np.zeros((dim,)) # data

@@ -5,10 +5,7 @@ import pickle
 import os
 from tqdm import tqdm
 
-import src.metrics as metrics
-import src.kernels as kernels
 import src.exp_utils as exp_utils
-from experiments.rbm import parallel_optimize
 
 from pathlib import Path
 import argparse
@@ -72,12 +69,8 @@ if __name__ == "__main__":
     scale_ls = [1., 2., 3., 5., 10., 20.]
 
     # mixture means and ratios
-    dir_ls = np.random.uniform(-2., 2., size=(args.nmix, dim))
-    # angles = np.random.uniform(0., 2*np.pi, size=(args.nmix))
-    # dir_ls = np.array([[np.cos(a), np.sin(a)] for a in angles])
-    # dir_ls = np.random.normal(size=(args.nmix, dim))
-    # dir_ls = dir_ls / np.sum(dir_ls**2, axis=-1, keepdims=True)**0.5
-    
+    dir_ls = np.random.uniform(-2., 2., size=(args.nmix, dim)) # sample directions of means
+
     model_ratio_ls = np.random.uniform(size=(args.nmix))
     model_ratio_ls = model_ratio_ls / np.sum(model_ratio_ls)
 
@@ -93,9 +86,7 @@ if __name__ == "__main__":
 
         for scale in tqdm(scale_ls):
             # create mean vectors 
-            # print("dir_ls", dir_ls)
             mean_ls = dir_ls * scale
-            # print("mean_ls", mean_ls)
             means[scale] = mean_ls
 
             # define score function
@@ -115,23 +106,9 @@ if __name__ == "__main__":
             X_res[scale] = Xs
             score_res[scale] = scores
 
-            # # find tau
-            # X = Xs[0]
-            # a = np.percentile(jnp.sum(X**2, -1)**0.5, 50.0)
-            # score_weight_fn = kernels.PolyWeightFunction(a=a)
-            # kernel0 = kernels.IMQ(med_heuristic=True, X=X, Y=X)
-            # kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
-            # ksd = metrics.KSD(kernel, score_fn=score_fn)
-        
-            # opt_res = parallel_optimize(Xs[0, :20], ksd, maxiter=500)
-            # tau = jnp.max(-opt_res)
-            # tau_res[scale] = tau
-            # print("tau", tau)
-
         # save data
         pickle.dump(X_res, open(os.path.join(SAVE_DIR, f"X_res_n{args.n}_d{dim}.pkl"), "wb"))
         pickle.dump(score_res, open(os.path.join(SAVE_DIR, f"score_res_n{args.n}_d{dim}.pkl"), "wb"))
-        # pickle.dump(tau_res, open(os.path.join(SAVE_DIR, f"tau_d{dim}.pkl"), "wb"))
 
         params_setup = {"means": means, "model_ratios": model_ratio_ls, "data_ratios": data_ratio_ls}
         pickle.dump(params_setup, open(os.path.join(SAVE_DIR, f"setup_d{dim}.pkl"), "wb"))
@@ -141,7 +118,6 @@ if __name__ == "__main__":
     else:
         X_res = pickle.load(open(os.path.join(SAVE_DIR, f"X_res_n{args.n}_d{dim}.pkl"), "rb"))
         score_res = pickle.load(open(os.path.join(SAVE_DIR, f"score_res_n{args.n}_d{dim}.pkl"), "rb"))
-        # tau_res = pickle.load(open(os.path.join(SAVE_DIR, f"tau_d{dim}.pkl"), "rb"))
 
         X_res = {kk: xx[:, :args.n, :] for kk, xx in X_res.items()}
         score_res = {kk: xx[:, :args.n, :] for kk, xx in score_res.items()}
@@ -153,12 +129,9 @@ if __name__ == "__main__":
     res = {}
         
     for scale in scale_ls:
-        # tau = tau_res[scale]
-        # theta = eps0 * tau**0.5
 
         res[scale] = exp_utils.run_tests(
             samples=X_res[scale], scores=score_res[scale], hvps=None, hvp_denom_sup=None,
-            # theta=theta, 
             bw="med", alpha=0.05, verbose=True,
             compute_tau=True, eps0=eps0,
         )

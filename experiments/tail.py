@@ -17,29 +17,16 @@ import argparse
 
 def t_pdf_multivariate_single(x, df):
     d = x.shape[-1]
-    # t_pdf = lambda j: jax.scipy.stats.t.pdf(x[j], df, scale=scale)
     t_pdf = lambda j: jax.scipy.stats.t.pdf(x[j], df)
     return jnp.sum(jax.vmap(t_pdf)(jnp.arange(d, dtype=jnp.int32)))
 
 def t_pdf_multivariate(X, df):
-    # scale = jnp.sqrt((df - 2) / df)
-    # single_den = lambda x: t_pdf_multivariate_single(x, df, scale)
     single_den = lambda x: t_pdf_multivariate_single(x, df)
     return jax.vmap(single_den)(X)
 
 def t_score_fn(X, df):
-    # scale = jnp.sqrt((df - 2) / df)
-    # t_pdf_multivariate_fn = lambda x: t_pdf_multivariate(x, df, scale)
     t_pdf_multivariate_fn = lambda x: t_pdf_multivariate(x, df)
     return jax.vmap(jax.grad(t_pdf_multivariate_fn))(X)
-
-# def compute_nu_threshold(theta, tau):
-#     """Compute lower bound for degree-of-freedom nu so that 
-#     \KSD(t_\nu, P) = \theta + o(1), where P = \cN(0, 1).
-#     """
-#     delta0 = tau**0.5 / theta
-#     lb = (delta0 * (2 * jnp.sqrt(2 * jnp.pi))**(-1))**6
-#     return lb.item()
 
 def compute_theta_fat_tail(nu, tau, init_val=1.):
     normal_pdf = lambda x: scipy.stats.norm.pdf(x)
@@ -87,7 +74,6 @@ if __name__ == "__main__":
 
             X_res[dof] = Xs
 
-            # scores = t_score_fn(Xs, dof) # nrep, n, 1
             scores = score_fn(Xs)
             score_res[dof] = scores
 
@@ -101,14 +87,12 @@ if __name__ == "__main__":
         # save data
         pickle.dump(X_res, open(os.path.join(SAVE_DIR, f"X_res_n{args.n}_d{dim}.pkl"), "wb"))
         pickle.dump(score_res, open(os.path.join(SAVE_DIR, f"score_res_n{args.n}_d{dim}.pkl"), "wb"))
-        # pickle.dump(tau_res, open(os.path.join(SAVE_DIR, f"tau_d{dim}.pkl"), "wb"))
 
         print("Saved to", SAVE_DIR)
 
     else:
         X_res = pickle.load(open(os.path.join(SAVE_DIR, f"X_res_n{args.n}_d{dim}.pkl"), "rb"))
         score_res = pickle.load(open(os.path.join(SAVE_DIR, f"score_res_n{args.n}_d{dim}.pkl"), "rb"))
-        # tau_res = pickle.load(open(os.path.join(SAVE_DIR, f"tau_d{dim}.pkl"), "rb"))
 
         X_res = {kk: xx[:, :args.n, :] for kk, xx in X_res.items()}
         score_res = {kk: xx[:, :args.n, :] for kk, xx in score_res.items()}
@@ -120,12 +104,8 @@ if __name__ == "__main__":
     res = {}
         
     for dof in dof_ls:
-        # tau = tau_res[dof]
-        # theta = eps0 * tau**0.5
-
         res[dof] = exp_utils.run_tests(
             samples=X_res[dof], scores=score_res[dof], hvps=None, hvp_denom_sup=None,
-            # theta=theta, 
             bw="med", alpha=0.05, verbose=True,
             compute_tau=True, eps0=eps0,
         )
