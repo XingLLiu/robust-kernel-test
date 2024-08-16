@@ -15,7 +15,7 @@ class Bootstrap:
         self.divergence = divergence
         self.ndraws = ndraws
 
-    def compute_bootstrap(self, X, Y):
+    def compute_bootstrap(self, X: jnp.array, Y: jnp.array):
         raise NotImplementedError
 
     def pval(self, X: jnp.array = None, return_boot: bool = False, return_stat: bool = False, score: jnp.ndarray = None):
@@ -35,7 +35,6 @@ class Bootstrap:
         elif return_stat and return_boot:
             return pval, test_stat, boot_stats
 
-
 class WeightedBootstrap(Bootstrap):
     """Efron's bootstrap, also known as weighted bootstrap
 
@@ -50,28 +49,24 @@ class WeightedBootstrap(Bootstrap):
         self.divergence = divergence
         self.ndraws = ndraws
 
-    def compute_bootstrap(self, X, Y, score: jnp.ndarray = None, degen: bool = True, wild: bool = False):
+    def compute_bootstrap(self, X: jnp.array, Y: jnp.array, score: jnp.ndarray = None, wild: bool = False):
         """
         Compute bootstrapped statistics.
 
         :param X: numpy array of shape (n, d)
         :param Y: numpy array of shape (m, d)
-        :param degen: bool. Whether to center the multinomial weights by their mean. Set to True
-            for the standard KSD test.
+        :param wild: bool. If False, use weighted/Efron's bootstrap. If True, use wild bootstrap.
         """
         assert X.shape[-2] == Y.shape[-2], "X and Y must have the same sample size."
         
         # draw Rademacher rvs
         n = X.shape[-2]
-        if degen:
-            if not wild:
-                r = multinomial(n, pvals=[1/n]*n, size=self.ndraws) - 1 # b, n
-            else:
-                r = np.random.choice([-1, 1], size=(self.ndraws, n)) # b, n
-
+        if not wild:
+            # weighted/Efron's bootstrap
+            r = multinomial(n, pvals=[1/n]*n, size=self.ndraws) - 1 # b, n
         else:
-            #TODO remove if not used
-            r = multinomial(n, pvals=[1/n]*n, size=self.ndraws) # b, n
+            # wild bootstrap
+            r = np.random.choice([-1, 1], size=(self.ndraws, n)) # b, n
 
         # compute test stat
         vstat = self.divergence.vstat(X, Y, score=score) # n, n
@@ -83,37 +78,4 @@ class WeightedBootstrap(Bootstrap):
         boot_stats = jnp.sum(jnp.squeeze(boot_stats, -1) * r, -1) / (n**2) # b
 
         return boot_stats, test_stat
-
-class RobustMMDTest(object):
-
-    def __init__(self, mmd, eps0: float, ndraws: int = 1000):
-        """
-        :param mmd: MMD object
-        :param ndraws: number of bootstrap draws
-        """
-        self.mmd = mmd
-        self.ndraws = ndraws
-        self.bootstrap = WeightedBootstrap(mmd, ndraws)
-        self.eps0 = eps0
-
-    def compute_radius(self, Y):
-        """
-        Compute the radius of the ball.
-        """
-        m = Y.shape[-2]
-        mu_p0_norm_sq = jnp.sum(self.mmd.kernel(Y, Y), (-1, -2)) / m**2 # m, m
-
-        radius = self.eps0 * jnp.sqrt(mu_p0_norm_sq + self.mmd.kernel.UB())
-        return radius
-
-    def test(self, alpha, X, Y):
-        
-        theta = self.compute_radius(Y)
-
-        boot_stats, test_stat = self.bootstrap.compute_bootstrap(X, Y)
-        quantile = jnp.percentile(boot_stats, 100 * (1 - alpha))
-        threshold = (theta + quantile**0.5)**2
-
-        res = float(test_stat > threshold)
-        return res
 

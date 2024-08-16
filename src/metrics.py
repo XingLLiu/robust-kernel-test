@@ -7,7 +7,7 @@ import src.bootstrap as boot
 
 class Metric:
 
-    def __call__(self, X, Y):
+    def __call__(self, X: jnp.array, Y: jnp.array):
         raise NotImplementedError
     
 
@@ -361,7 +361,7 @@ class KSD(Metric):
         # compute bootstrap quantile
         bootstrap = boot.WeightedBootstrap(self, ndraws=nboot)
         
-        boot_stats_degen, vstat = bootstrap.compute_bootstrap(X, X, score=score, degen=True, wild=wild)
+        boot_stats_degen, vstat = bootstrap.compute_bootstrap(X, X, score=score, wild=wild)
         boot_stats_degen = jnp.concatenate([boot_stats_degen, jnp.array([vstat])])
 
         # compute tau and theta
@@ -445,7 +445,7 @@ class KSdistance(Metric):
     def __init__(self):
         pass
 
-    def __call__(self, X, Y):
+    def __call__(self, X: jnp.array, Y: jnp.array):
         if X.ndim > 1: 
             assert X.shape[-1] == 1
         if Y.ndim > 1:
