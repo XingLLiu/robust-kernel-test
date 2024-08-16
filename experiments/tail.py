@@ -7,34 +7,45 @@ from tqdm import tqdm
 import scipy
 from scipy.optimize import minimize as sci_minimize
 
-import src.metrics as metrics
-import src.kernels as kernels
 import src.exp_utils as exp_utils
 
 from pathlib import Path
 import argparse
 
 
-def t_pdf_multivariate_single(x, df):
+def t_pdf_multivariate_single(x, df, scale):
     d = x.shape[-1]
-    t_pdf = lambda j: jax.scipy.stats.t.pdf(x[j], df)
+    t_pdf = lambda j: jax.scipy.stats.t.pdf(x[j], df, scale=scale)
     return jnp.sum(jax.vmap(t_pdf)(jnp.arange(d, dtype=jnp.int32)))
 
 def t_pdf_multivariate(X, df):
-    single_den = lambda x: t_pdf_multivariate_single(x, df)
+    scale = jnp.sqrt((df - 2) / df)
+    single_den = lambda x: t_pdf_multivariate_single(x, df, scale)
     return jax.vmap(single_den)(X)
 
 def t_score_fn(X, df):
-    t_pdf_multivariate_fn = lambda x: t_pdf_multivariate(x, df)
+    scale = jnp.sqrt((df - 2) / df)
+    t_pdf_multivariate_fn = lambda x: t_pdf_multivariate(x, df, scale)
     return jax.vmap(jax.grad(t_pdf_multivariate_fn))(X)
 
-def compute_theta_fat_tail(nu, tau, init_val=1.):
+def compute_theta_fat_tail(nu, tau, init_val1=1., init_val2=2.):
+    scale = jnp.sqrt((nu - 2) / nu)
+
     normal_pdf = lambda x: scipy.stats.norm.pdf(x)
-    t_pdf = lambda x: scipy.stats.t.pdf(x, nu)
-    summary = sci_minimize(lambda x: normal_pdf(x) - t_pdf(x), init_val, method="BFGS")
-    intersection = summary.x[0]
-    diff = scipy.stats.norm.cdf(intersection) - scipy.stats.t.cdf(intersection, nu)
-    theta = 4 * tau**0.5 * diff
+    t_pdf = lambda x: scipy.stats.t.pdf(x, nu, scale=scale)
+    obj_fn = lambda x: (normal_pdf(x) - t_pdf(x))**2
+    summary1 = sci_minimize(obj_fn, init_val1, method="BFGS")
+    summary2 = sci_minimize(obj_fn, init_val2, method="BFGS")
+    intersection1 = summary1.x[0]
+    intersection2 = summary2.x[0]
+    
+    norm_cdf = lambda x: scipy.stats.norm.cdf(x)
+    t_cdf = lambda x: scipy.stats.t.cdf(x, nu, scale=scale)
+    diff = (
+        t_cdf(intersection1) - norm_cdf(intersection1) + 
+        norm_cdf(intersection2) - t_cdf(intersection2)
+    )
+    theta = tau**0.5 * 4 * diff
     return theta
 
 
@@ -69,20 +80,15 @@ if __name__ == "__main__":
         tau_res = {}
 
         for dof in tqdm(dof_ls):
-            Xs = np.random.standard_t(df=dof, size=(args.nrep, args.n, dim))
+            scale = jnp.sqrt((dof - 2) / dof)
+            # scale = 1. #!
+            Xs = np.random.standard_t(df=dof, size=(args.nrep, args.n, dim)) * scale
             assert Xs.shape == (args.nrep, args.n, dim)
 
             X_res[dof] = Xs
 
             scores = score_fn(Xs)
             score_res[dof] = scores
-
-            # find tau
-            X = Xs[0]
-            score_weight_fn = kernels.PolyWeightFunction()
-            kernel0 = kernels.IMQ(med_heuristic=True, X=X, Y=X)
-            kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=score_weight_fn)
-            ksd = metrics.KSD(kernel, score_fn=score_fn)
 
         # save data
         pickle.dump(X_res, open(os.path.join(SAVE_DIR, f"X_res_n{args.n}_d{dim}.pkl"), "wb"))
@@ -108,6 +114,7 @@ if __name__ == "__main__":
             samples=X_res[dof], scores=score_res[dof], hvps=None, hvp_denom_sup=None,
             bw="med", alpha=0.05, verbose=True,
             compute_tau=True, eps0=eps0,
+            auto_weight_a=True
         )
 
     # 3. save results

@@ -48,13 +48,13 @@ def run_tests(
         samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=None, alpha=0.05, verbose=False,
         weight_fn_args=None, base_kernel="IMQ", run_ksdagg=False, ksdagg_bw=None, run_dev=False, tau=None,
         run_devmmd=False, run_dcmmd=False, samples_p=None, key=2024,
-        compute_tau=False, timetest=False, wild=False
+        compute_tau=False, timetest=False, wild=False,
+        auto_weight_a=False,
     ):
     res = {
         "standard": {"nonsq_stat": [], "stat": [], "u_stat": [], "pval": [], "rej": [], "boot_stats": []},
         "tilted": {"nonsq_stat": [], "stat": [], "u_stat": [], "pval": [], "rej": [], "boot_stats": []},
         "tilted_r_boot": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "pval": [], "tau": [], "time": []},
-        # "tilted_r_bootmax": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": []},
         "tilted_r_dev": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": []},
     }
     res["theta"] = theta
@@ -114,7 +114,9 @@ def run_tests(
         res["standard"]["boot_stats"].append(boot_stats)
 
         # 2. tilted
-        weight_fn = weight_fn_class(**weight_fn_args)
+        if auto_weight_a:
+           weight_fn_args["a"] = jnp.std(jnp.sum(X**2, -1)) 
+        weight_fn = weight_fn_class(**weight_fn_args)    
         kernel0 = base_kernel_class(**kernel_args)
         kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=weight_fn)
 
@@ -155,16 +157,6 @@ def run_tests(
         res["tilted_r_boot"]["rej"].append(int(max(0, nonsq_stat - theta) > q_degen_nonsq))
         res["tilted_r_boot"]["pval"].append(thresh_res["pval_degen"])
         res["tilted_r_boot"]["tau"].append(tau)
-
-        # # 4. bootstrap
-        # res["tilted_r_bootmax"]["stat"].append(vstat)
-        # res["tilted_r_bootmax"]["nonsq_stat"].append(nonsq_stat)
-        # res["tilted_r_bootmax"]["u_stat"].append(ustat)
-        # res["tilted_r_bootmax"]["threshold"].append(q_max + theta**2)
-        # res["tilted_r_bootmax"]["theta"].append(theta)
-        # res["tilted_r_bootmax"]["gamma"].append(np.sqrt(q_max))
-        # res["tilted_r_bootmax"]["rej"].append(int(vstat > q_max + theta**2))
-        # res["tilted_r_bootmax"]["tau"].append(tau)
 
         # 5. deviation
         if run_dev:
