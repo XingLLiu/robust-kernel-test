@@ -5,7 +5,7 @@ from setuptools import setup, find_packages
 
 # Function to read the requirements.txt file
 def parse_requirements(filename):
-    with open(filename, 'r') as f:
+    with open(filename, "r") as f:
         return f.read().splitlines()
     
 
@@ -35,23 +35,4 @@ setup(
     # requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
     install_requires=parse_requirements('requirements.txt'),
-    # install_requires=[
-    #     "numpy==1.26.4",
-    #     "jax[cpu]==0.4.30",
-    #     "pandas==2.2.2",
-    #     "scipy==1.13.1",
-    #     "matplotlib==3.9.0",
-    #     "notebook>=7.0",
-    #     "ipywidgets==8.1.3",
-    #     "scikit-learn==1.5.0",
-    #     "tqdm==4.66.4",
-    #     "seaborn==0.13.2",
-    #     "jaxopt",
-    #     "rdata",
-    #     # "git+https://github.com/wittawatj/kernel-gof.git@master#egg=kernel-gof" # for Gaussian-Bernoulli RBM example
-    #     "kernel-gof"
-    # ],
-    # dependency_links=[
-    #     'git+https://github.com/wittawatj/kernel-gof.git@master#egg=kernel-gof'
-    # ],
 )
