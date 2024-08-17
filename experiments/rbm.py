@@ -10,7 +10,6 @@ import time
 
 
 import rksd.exp_utils as exp_utils
-import experiments.efm as exp_efm
 
 from kgof import data as kgof_data
 import rksd.kgof_density as kgof_den

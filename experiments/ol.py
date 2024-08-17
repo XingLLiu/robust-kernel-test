@@ -7,7 +7,6 @@ from tqdm import tqdm
 import lqrt
 
 import rksd.exp_utils as exp_utils
-import experiments.efm as exp_efm
 
 from pathlib import Path
 import argparse
