@@ -30,5 +30,6 @@ import rksd
 ├── figs                          # Folder to store figures
 ├── experiments                   # Scripts for experiments
 ├── setup.py                      # Setup file for easy-install of rksd
+├── requirements.txt              # Package dependencies 
 └── README.md
 ```

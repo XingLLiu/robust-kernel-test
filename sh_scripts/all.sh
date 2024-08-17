@@ -24,3 +24,15 @@ echo ms >> test.txt
 sh sh_scripts/ms_dim.sh
 date >> test.txt
 
+echo bw >> test.txt
+sh sh_scripts/bw.sh
+date >> test.txt
+
+echo rate >> test.txt
+sh sh_scripts/rate.sh
+date >> test.txt
+
+echo tail >> test.txt
+sh sh_scripts/tail.sh
+date >> test.txt
+
