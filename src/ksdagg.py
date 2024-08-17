@@ -1,9 +1,12 @@
 """
-Jax implementation
-This file implements our KSDAgg test in the function ksdagg().
-For details, see our paper:
-KSD Aggregated Goodness-of-fit Test
-Antonin Schrab, Benjamin Guedj, Arthur Gretton
+Module containing implementations of the KSDAgg test of 
+- Schrab et al. (2022). KSD Aggregated Goodness-of-fit Test. NeurIPS.
+
+Adapted from 
+- https://github.com/antoninschrab/ksdagg-paper/blob/master/ksdagg/jax.py
+
+Compared to the original implementation:
+- We allow the kernel to be either the standard IMQ kernel or a tilted IMQ kernel.
 """
 
 import jax
