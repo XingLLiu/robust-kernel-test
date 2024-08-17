@@ -39,6 +39,6 @@ setup(
         "seaborn",
         "jaxopt",
         "rdata",
-        "https://github.com/wittawatj/kernel-gof.git"
+        "https://github.com/wittawatj/kernel-gof.git" # for Gaussian-Bernoulli RBM example
     ]
 )
