@@ -9,11 +9,11 @@ import copy
 import time
 
 
-import src.exp_utils as exp_utils
+import rksd.exp_utils as exp_utils
 import experiments.efm as exp_efm
 
 from kgof import data as kgof_data
-import src.kgof_density as kgof_den
+import rksd.kgof_density as kgof_den
 
 from pathlib import Path
 import argparse
@@ -84,7 +84,7 @@ if __name__ == "__main__":
             ols = []
 
             for i in trange(args.nrep):
-                X, ol = exp_efm.sample_outlier_contam(
+                X, ol = exp_utils.sample_outlier_contam(
                     Xs[i], eps=eps, ol_mean=np.zeros((args.dim,)), ol_std=0.1, return_ol=True,
                 )
                 Xs = Xs.at[i].set(X)

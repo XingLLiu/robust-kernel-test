@@ -7,10 +7,34 @@ from typing import Union
 
 from dckernel import dcmmd
 
-import src.metrics as metrics
-import src.kernels as kernels
-import src.bootstrap as boot
-import src.ksdagg as src_ksdagg
+import rksd.metrics as metrics
+import rksd.kernels as kernels
+import rksd.bootstrap as boot
+import rksd.ksdagg as src_ksdagg
+
+
+def sample_outlier_contam(
+        X: jnp.ndarray, 
+        eps: float, 
+        ol_mean: float, 
+        ol_std: float, 
+        return_ol: bool = False,
+    ):
+    """
+    """
+    n, d = X.shape[0], X.shape[1]
+    ncontam = int(n * eps)
+    if ol_std > 0:
+        outliers = np.random.multivariate_normal(mean=ol_mean, cov=np.eye(d)*ol_std, size=ncontam)
+    else:
+        outliers = ol_mean
+    idx = np.random.choice(range(n), size=ncontam, replace=False) # ncontam
+    X = X.at[idx].set(outliers)
+    
+    if not return_ol:
+        return X
+    else:
+        return X, outliers
 
 
 def change_theta(

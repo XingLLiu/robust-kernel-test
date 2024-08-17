@@ -1,5 +1,5 @@
 import jax.numpy as jnp
-import src.bootstrap as boot
+import rksd.bootstrap as boot
 from typing import Union
 
 

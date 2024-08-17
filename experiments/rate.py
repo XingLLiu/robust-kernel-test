@@ -3,8 +3,7 @@ import jax
 import pickle
 import os
 
-import src.exp_utils as exp_utils
-import experiments.efm as exp_efm
+import rksd.exp_utils as exp_utils
 
 from pathlib import Path
 import argparse
@@ -51,7 +50,7 @@ if __name__ == "__main__":
         for eps, n in zip(eps_ls, n_ls):
             Xs = np.random.multivariate_normal(mean_data, np.eye(dim), (args.nrep, n)) # nrep, n, 1
             ol_mean = np.ones(args.dim)[0] * ol
-            Xs = jax.vmap(lambda x: exp_efm.sample_outlier_contam(x, eps=eps, ol_mean=ol_mean, ol_std=0.))(Xs)
+            Xs = jax.vmap(lambda x: exp_utils.sample_outlier_contam(x, eps=eps, ol_mean=ol_mean, ol_std=0.))(Xs)
             assert Xs.shape == (args.nrep, n, dim)
 
             X_res[ol_key][n] = Xs

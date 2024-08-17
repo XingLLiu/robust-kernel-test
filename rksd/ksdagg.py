@@ -14,8 +14,8 @@ import jax.numpy as jnp
 from jax import vmap, random, jit
 from jax.flatten_util import ravel_pytree
 from functools import partial
-from src.metrics import KSD
-import src.kernels as kernels
+from rksd.metrics import KSD
+import rksd.kernels as kernels
 
 
 # @partial(jit, static_argnums=(2, 3, 4, 5, 6, 9, 10, 11, 12, 13))

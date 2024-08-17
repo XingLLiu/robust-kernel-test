@@ -7,7 +7,7 @@ from tqdm import tqdm
 import scipy
 from scipy.optimize import minimize as sci_minimize
 
-import src.exp_utils as exp_utils
+import rksd.exp_utils as exp_utils
 
 from pathlib import Path
 import argparse

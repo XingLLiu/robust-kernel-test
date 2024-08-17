@@ -7,8 +7,8 @@ from tqdm import trange
 import rdata
 
 
-import src.kernels as kernels
-import src.exp_utils as exp_utils
+import rksd.kernels as kernels
+import rksd.exp_utils as exp_utils
 
 from pathlib import Path
 import argparse
@@ -66,27 +66,6 @@ class ExpFamilyModel(object):
         term1 = term1 + jnp.eye(term1.shape[0]) * 1e-4
         term2 = jnp.mean(2 * JT_K_gradb + JT_grad2_K + grad1_K_JT, [0, 1]) # r, r
         return jnp.linalg.solve(term1, -0.5 * term2)
-
-class NormalLocModel(ExpFamilyModel):
-    def __init__(self, params):
-        super().__init__(params)
-
-    def t(self, x):
-        return x
-    
-    def b(self, x):
-        return -0.5 * jnp.sum(x**2)
-
-    def _compute_grads(self, x):
-        """
-        :param: x: n, 1
-        """
-        JT = jax.vmap(lambda x: jax.jacfwd(self.t)(x))(x) # n, L, 1
-
-        grad_b = jax.vmap(lambda x: jax.grad(self.b)(x))(x) # n, 1
-
-        return JT, grad_b, None
-
 
 class KernelExpFamily(ExpFamilyModel):
     def __init__(self, params, bw, L, p0_loc, p0_scale):

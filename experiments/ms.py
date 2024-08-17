@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import pickle
 import os
 
-import src.exp_utils as exp_utils
+import rksd.exp_utils as exp_utils
 
 from pathlib import Path
 import argparse

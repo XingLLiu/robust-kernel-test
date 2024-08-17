@@ -3,7 +3,7 @@ import jax
 import pickle
 import os
 
-import src.exp_utils as exp_utils
+import rksd.exp_utils as exp_utils
 from experiments.ol import sample_outlier_contam
 
 from pathlib import Path

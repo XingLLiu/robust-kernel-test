@@ -5,8 +5,7 @@ import pickle
 import os
 from tqdm import tqdm
 
-import src.exp_utils as exp_utils
-import experiments.efm as exp_efm
+import rksd.exp_utils as exp_utils
 
 from pathlib import Path
 import argparse
@@ -62,7 +61,7 @@ if __name__ == "__main__":
 
             for eps in eps_ls:
                 Xs = np.random.multivariate_normal(mean_data, np.eye(dim), (args.nrep, args.n)) # nrep, n, 1
-                Xs = jax.vmap(lambda x: exp_efm.sample_outlier_contam(x, eps=eps, ol_mean=ol, ol_std=0.))(Xs)
+                Xs = jax.vmap(lambda x: exp_utils.sample_outlier_contam(x, eps=eps, ol_mean=ol, ol_std=0.))(Xs)
                 assert Xs.shape == (args.nrep, args.n, dim)
 
                 X_res[ol_key][eps] = Xs

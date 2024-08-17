@@ -6,7 +6,7 @@ import os
 from tqdm import tqdm
 import lqrt
 
-import src.exp_utils as exp_utils
+import rksd.exp_utils as exp_utils
 import experiments.efm as exp_efm
 
 from pathlib import Path
@@ -71,7 +71,7 @@ if __name__ == "__main__":
             for eps in eps_ls:
                 Xs = np.random.multivariate_normal(mean_data, np.eye(dim), (args.nrep, args.n)) # nrep, n, 1
                 ol_mean = np.ones(args.dim)[0] * ol
-                Xs = jax.vmap(lambda x: exp_efm.sample_outlier_contam(x, eps=eps, ol_mean=ol_mean, ol_std=0.))(Xs)
+                Xs = jax.vmap(lambda x: exp_utils.sample_outlier_contam(x, eps=eps, ol_mean=ol_mean, ol_std=0.))(Xs)
                 assert Xs.shape == (args.nrep, args.n, dim)
 
                 X_res[ol_key][eps] = Xs
