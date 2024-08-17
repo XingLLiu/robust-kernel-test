@@ -76,7 +76,6 @@ def run_tests(
         key: int = 2024,
         timetest: bool = False, 
         wild: bool = False,
-        auto_weight_a: bool = False,
     ):
     """
     Run the tests for a given set of samples and scores.
@@ -101,7 +100,6 @@ def run_tests(
     :param key: int. Random seed used in MMD-Dev and/or dcMMD tests.
     :param timetest: bool. If True, measure the wall-clock time taken to compute the test.
     :param wild: bool. If True, use the wild bootstrap in the robuts-KSD test.
-    :param auto_weight_a: bool. If True, use the automatic choice of the weight function parameter a = \sqrt{Var(X)}.
 
     :return: dictionary of results. 
     """
@@ -163,8 +161,6 @@ def run_tests(
         res["standard"]["boot_stats"].append(boot_stats)
 
         # 2. tilted
-        if auto_weight_a:
-           weight_fn_args["a"] = jnp.std(jnp.sum(X**2, -1)) 
         weight_fn = weight_fn_class(**weight_fn_args)    
         kernel0 = base_kernel_class(**kernel_args)
         kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=weight_fn)
@@ -200,7 +196,7 @@ def run_tests(
         res["tilted"]["pval"].append(pval_standard)
         res["tilted"]["rej"].append(int(pval_standard < alpha))
         
-        # 3. bootstrap degen
+        # 3. robust-KSD
         res["tilted_r_boot"]["stat"].append(vstat)
         res["tilted_r_boot"]["nonsq_stat"].append(nonsq_stat)
         res["tilted_r_boot"]["u_stat"].append(ustat)
@@ -211,7 +207,7 @@ def run_tests(
         res["tilted_r_boot"]["pval"].append(thresh_res["pval"])
         res["tilted_r_boot"]["tau"].append(tau)
 
-        # 4. deviation
+        # 4. KSD-Dev
         if run_dev:
             dev_threshold = ksd.compute_deviation_threshold(n, tau, alpha)
             res["tilted_r_dev"]["stat"].append(vstat)
@@ -233,7 +229,7 @@ def run_tests(
             Y = samples_p[i]
             dcmmd_rej, mmd_output = dcmmd(keys[i], X, Y, eps0*n, return_dictionary=True)
 
-        # 6. devmmd
+        # 6. MMD-Dev
         if run_devmmd:
             nonsq_mmd = mmd_output["MMD V-statistic"]
             tau_mmd = 2.

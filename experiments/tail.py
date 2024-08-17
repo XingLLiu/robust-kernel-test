@@ -113,7 +113,6 @@ if __name__ == "__main__":
             samples=X_res[dof], 
             scores=score_res[dof], 
             eps0=eps0,
-            # auto_weight_a=True, #TODO
         )
 
     # 3. save results
