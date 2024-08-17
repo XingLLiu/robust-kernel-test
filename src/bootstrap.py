@@ -15,16 +15,16 @@ class Bootstrap:
         self.divergence = divergence
         self.ndraws = ndraws
 
-    def compute_bootstrap(self, X: jnp.array, Y: jnp.array):
+    def compute_bootstrap(self, X: jnp.array):
         raise NotImplementedError
 
-    def pval(self, X: jnp.array = None, return_boot: bool = False, return_stat: bool = False, score: jnp.ndarray = None):
+    def pval(self, X: jnp.array, return_boot: bool = False, return_stat: bool = False, score: jnp.ndarray = None):
         """Compute the p-value for the KSD test.
 
         :param X: numpy array of shape (n, d)
         :param Y: numpy array of shape (m, d)
         """
-        boot_stats, test_stat = self.compute_bootstrap(X, X, score=score)
+        boot_stats, test_stat = self.compute_bootstrap(X, score=score)
         pval = (1. + jnp.sum(boot_stats > test_stat)) / (self.ndraws + 1)
         if not return_boot and not return_stat:
             return pval
@@ -49,16 +49,14 @@ class WeightedBootstrap(Bootstrap):
         self.divergence = divergence
         self.ndraws = ndraws
 
-    def compute_bootstrap(self, X: jnp.array, Y: jnp.array, score: jnp.ndarray = None, wild: bool = False):
+    def compute_bootstrap(self, X: jnp.array, score: jnp.ndarray = None, wild: bool = False):
         """
         Compute bootstrapped statistics.
 
         :param X: numpy array of shape (n, d)
         :param Y: numpy array of shape (m, d)
         :param wild: bool. If False, use weighted/Efron's bootstrap. If True, use wild bootstrap.
-        """
-        assert X.shape[-2] == Y.shape[-2], "X and Y must have the same sample size."
-        
+        """        
         # draw Rademacher rvs
         n = X.shape[-2]
         if not wild:
@@ -69,7 +67,7 @@ class WeightedBootstrap(Bootstrap):
             r = np.random.choice([-1, 1], size=(self.ndraws, n)) # b, n
 
         # compute test stat
-        vstat = self.divergence.vstat(X, Y, score=score) # n, n
+        vstat = self.divergence.vstat(X, score=score) # n, n
         self.gram_mat = vstat
         test_stat = jnp.sum(vstat) / (n**2)
         

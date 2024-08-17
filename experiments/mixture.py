@@ -131,9 +131,9 @@ if __name__ == "__main__":
     for scale in scale_ls:
 
         res[scale] = exp_utils.run_tests(
-            samples=X_res[scale], scores=score_res[scale], hvps=None, hvp_denom_sup=None,
-            bw="med", alpha=0.05, verbose=True,
-            compute_tau=True, eps0=eps0,
+            samples=X_res[scale], 
+            scores=score_res[scale], 
+            eps0=eps0,
         )
 
     # 3. save results

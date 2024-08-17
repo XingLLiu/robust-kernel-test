@@ -1,8 +1,9 @@
 import jax
 import numpy as np
 import jax.numpy as jnp
-from tqdm import tqdm, trange
+from tqdm import trange
 import time
+from typing import Union
 
 from dckernel import dcmmd
 
@@ -12,8 +13,20 @@ import src.bootstrap as boot
 import src.ksdagg as src_ksdagg
 
 
-def change_theta(res, methods, theta, eps0=None):
+def change_theta(
+        res: dict, 
+        methods: list, 
+        theta: float, 
+        eps0: float = None,
+    ):
     """Given a dictionary of results, change the theta value and the test outcome.
+
+    :param res: dictionary of results returned by run_tests.
+    :param methods: list of methods to change the theta value.
+    :param theta: new theta value.
+    :param eps0: Optional. epsilon_0 value used in the test. Must be provided if the methods includes devmmd or dcmmd.
+
+    :return: dictionary of results with the new theta value and test outcome.
     """
     thetas = jnp.array(theta)
     if thetas.shape == () or len(thetas) == 1:
@@ -26,7 +39,6 @@ def change_theta(res, methods, theta, eps0=None):
         res[mm]["theta"] = thetas
 
         if mm == "tilted_r_boot" or mm == "tilted_r_dev":
-            # print(mm, np.array([int(max(0, stat**0.5 - tt) > gam) for stat, gam, tt in zip(res[mm]["stat"], res[mm]["gamma"], thetas)]))
             res[mm]["rej"] = [int(max(0, stat**0.5 - tt) > gam) for stat, gam, tt in zip(res[mm]["stat"], res[mm]["gamma"], thetas)]
 
         elif mm == "tilted_r_bootmax":
@@ -45,12 +57,54 @@ def change_theta(res, methods, theta, eps0=None):
     return res
 
 def run_tests(
-        samples, scores, hvps, hvp_denom_sup, theta="ol", bw="med", eps0=None, alpha=0.05, verbose=False,
-        weight_fn_args=None, base_kernel="IMQ", run_ksdagg=False, ksdagg_bw=None, run_dev=False, tau=None,
-        run_devmmd=False, run_dcmmd=False, samples_p=None, key=2024,
-        compute_tau=False, timetest=False, wild=False,
-        auto_weight_a=False,
+        samples: jnp.array, 
+        scores: jnp.array, 
+        theta: Union[float, str] = "ol", 
+        eps0: float = None, 
+        tau_infty: Union[float, str] = "auto",
+        bw: Union[float, str] = "med", 
+        alpha: float = 0.05, 
+        verbose: bool = True,
+        weight_fn_args: dict = None, 
+        base_kernel: str = "IMQ", 
+        run_ksdagg: bool = False, 
+        ksdagg_bw: float = None, 
+        run_dev: bool = False, 
+        run_devmmd: bool = False, 
+        run_dcmmd: bool = False, 
+        samples_p: bool = None, 
+        key: int = 2024,
+        timetest: bool = False, 
+        wild: bool = False,
+        auto_weight_a: bool = False,
     ):
+    """
+    Run the tests for a given set of samples and scores.
+
+    :param samples: (nrep, n, d) array of samples.
+    :param scores: (nrep, n, d) array of scores.    
+    :param theta: float or str. If float, the value of theta to use in the test. If "ol", use \theta = \epsilon_0 \tau_\infty^{1/2}.
+    :param eps0: float. The value of epsilon_0 to use in the test. In this case, `theta` must be "ol". 
+    :param tau_infty: float. The value of tau_\infty to use in the robust-KSD test. If "auto", compute the value from the data 
+        as \tau_\infty \approx \max_{i,j} u_p(X_i, X_j).
+    :param bw: float or str. If float, the value of the bandwidth to use in the test. If "med", use the median heuristic.
+    :param alpha: float. The significance level.
+    :param verbose: bool. If True, show progress bar.
+    :param weight_fn_args: dict. Arguments to pass to the weight function.
+    :param base_kernel: str. The base kernel to use. Either "IMQ" or "RBF".
+    :param run_ksdagg: bool. If True, run the KSDAgg test.
+    :param ksdagg_bw: float. The bandwidth to use in the KSDAgg test. If None, the default choice in Schrab et al. (2024) is used.
+    :param run_dev: bool. If True, run the KSD-Dev test.
+    :param run_devmmd: bool. If True, run the MMD-Dev test.
+    :param run_dcmmd: bool. If True, run the dcMMD test.
+    :param samples_p: (nrep, n, d) array of model samples. Required if run_devmmd or run_dcmmd is True.
+    :param key: int. Random seed used in MMD-Dev and/or dcMMD tests.
+    :param timetest: bool. If True, measure the wall-clock time taken to compute the test.
+    :param wild: bool. If True, use the wild bootstrap in the robuts-KSD test.
+    :param auto_weight_a: bool. If True, use the automatic choice of the weight function parameter a = \sqrt{Var(X)}.
+
+    :return: dictionary of results. 
+    """
     res = {
         "standard": {"nonsq_stat": [], "stat": [], "u_stat": [], "pval": [], "rej": [], "boot_stats": []},
         "tilted": {"nonsq_stat": [], "stat": [], "u_stat": [], "pval": [], "rej": [], "boot_stats": []},
@@ -62,13 +116,9 @@ def run_tests(
     assert len(samples.shape) == 3, "Must be (batch, n, dim)"
 
     # weighting function
-    if weight_fn_args is None:
-        weight_fn_args = {}
-    if hvps is not None:
-        weight_fn_class = kernels.ScoreWeightFunction
-        weight_fn_args["hvp_denom_sup"] = hvp_denom_sup
-    else:
-        weight_fn_class = kernels.PolyWeightFunction
+    weight_fn_args = {} if weight_fn_args is None else weight_fn_args
+
+    weight_fn_class = kernels.PolyWeightFunction
 
     # base kernel
     if base_kernel == "IMQ":
@@ -94,7 +144,6 @@ def run_tests(
 
         X = samples[i]
         score = scores[i]
-        # hvp = hvps[i] if hvps is not None else None
         
         n = X.shape[-2]
         kernel_args = {"sigma_sq": None, "med_heuristic": True, "X": X, "Y": X} if bw == "med" else {"sigma_sq": 2*bw}
@@ -105,7 +154,7 @@ def run_tests(
         ksd = metrics.KSD(kernel)
         wild_boot = boot.WeightedBootstrap(ksd)
         pval, vstat, boot_stats = wild_boot.pval(X, return_stat=True, return_boot=True, score=score)
-        ustat = ksd(X, X, vstat=False, score=score)
+        ustat = ksd(X, vstat=False, score=score)
         res["standard"]["stat"].append(vstat)
         res["standard"]["nonsq_stat"].append(vstat**0.5)
         res["standard"]["u_stat"].append(ustat)
@@ -121,20 +170,24 @@ def run_tests(
         kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=weight_fn)
 
         ksd = metrics.KSD(kernel)
-        ustat = ksd(X, X, vstat=False, score=score)
+        ustat = ksd(X, vstat=False, score=score)
         if timetest:
             time0 = time.time()
         
         thresh_res = ksd.test_threshold(
-            eps0=eps0, theta=theta, alpha=alpha, X=X, score=score, 
-            compute_tau=compute_tau, wild=wild
+            X=X, 
+            score=score, 
+            eps0=eps0, 
+            theta=theta, 
+            alpha=alpha, 
+            tau_infty=tau_infty, 
+            wild=wild,
         )
 
         if timetest:
             res["tilted_r_boot"]["time"].append(time.time() - time0)
         
-        # q_max = thresh_res["q_max"]
-        q_degen_nonsq = thresh_res["q_degen_nonsq"]
+        q_nonsq = thresh_res["q_nonsq"]
         pval_standard = thresh_res["pval_standard"]
         vstat = thresh_res["vstat"]
         nonsq_stat = vstat**0.5
@@ -151,16 +204,15 @@ def run_tests(
         res["tilted_r_boot"]["stat"].append(vstat)
         res["tilted_r_boot"]["nonsq_stat"].append(nonsq_stat)
         res["tilted_r_boot"]["u_stat"].append(ustat)
-        res["tilted_r_boot"]["threshold"].append(q_degen_nonsq)
-        res["tilted_r_boot"]["gamma"].append(q_degen_nonsq)
+        res["tilted_r_boot"]["threshold"].append(q_nonsq)
+        res["tilted_r_boot"]["gamma"].append(q_nonsq)
         res["tilted_r_boot"]["theta"].append(theta)
-        res["tilted_r_boot"]["rej"].append(int(max(0, nonsq_stat - theta) > q_degen_nonsq))
-        res["tilted_r_boot"]["pval"].append(thresh_res["pval_degen"])
+        res["tilted_r_boot"]["rej"].append(int(max(0, nonsq_stat - theta) > q_nonsq))
+        res["tilted_r_boot"]["pval"].append(thresh_res["pval"])
         res["tilted_r_boot"]["tau"].append(tau)
 
-        # 5. deviation
+        # 4. deviation
         if run_dev:
-            # assert tau is not None, "Must specify tau for deviation test"
             dev_threshold = ksd.compute_deviation_threshold(n, tau, alpha)
             res["tilted_r_dev"]["stat"].append(vstat)
             res["tilted_r_dev"]["nonsq_stat"].append(nonsq_stat)
@@ -170,7 +222,7 @@ def run_tests(
             res["tilted_r_dev"]["gamma"].append(dev_threshold)
             res["tilted_r_dev"]["rej"].append(int(max(0, nonsq_stat - theta) > dev_threshold))
 
-        # 6. ksdagg
+        # 5. ksdagg
         if run_ksdagg:
             rej_ksdagg, summary_ksdagg = src_ksdagg.ksdagg(X, score, bandwidths=ksdagg_bw, return_dictionary=True)
             res["ksdagg"]["rej"].append(rej_ksdagg.item())
@@ -181,7 +233,7 @@ def run_tests(
             Y = samples_p[i]
             dcmmd_rej, mmd_output = dcmmd(keys[i], X, Y, eps0*n, return_dictionary=True)
 
-        # 7. devmmd
+        # 6. devmmd
         if run_devmmd:
             nonsq_mmd = mmd_output["MMD V-statistic"]
             tau_mmd = 2.
@@ -193,7 +245,7 @@ def run_tests(
             res["devmmd"]["nonsq_mmd"].append(nonsq_mmd)
             res["devmmd"]["threshold"].append(devmmd_threshold)
 
-        # 8. dcmmd
+        # 7. dcmmd
         if run_dcmmd:
             res["dcmmd"]["rej"].append(dcmmd_rej)
             res["dcmmd"]["summary"].append(mmd_output)

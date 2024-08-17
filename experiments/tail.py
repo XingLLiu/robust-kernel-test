@@ -81,7 +81,6 @@ if __name__ == "__main__":
 
         for dof in tqdm(dof_ls):
             scale = jnp.sqrt((dof - 2) / dof)
-            # scale = 1. #!
             Xs = np.random.standard_t(df=dof, size=(args.nrep, args.n, dim)) * scale
             assert Xs.shape == (args.nrep, args.n, dim)
 
@@ -111,10 +110,10 @@ if __name__ == "__main__":
         
     for dof in dof_ls:
         res[dof] = exp_utils.run_tests(
-            samples=X_res[dof], scores=score_res[dof], hvps=None, hvp_denom_sup=None,
-            bw="med", alpha=0.05, verbose=True,
-            compute_tau=True, eps0=eps0,
-            auto_weight_a=True
+            samples=X_res[dof], 
+            scores=score_res[dof], 
+            eps0=eps0,
+            # auto_weight_a=True, #TODO
         )
 
     # 3. save results

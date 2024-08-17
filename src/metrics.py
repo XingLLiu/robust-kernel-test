@@ -1,251 +1,9 @@
-import jax
 import jax.numpy as jnp
-import scipy.stats as sci_stats
-from numpy.random import multinomial
 import src.bootstrap as boot
+from typing import Union
 
 
-class Metric:
-
-    def __call__(self, X: jnp.array, Y: jnp.array):
-        raise NotImplementedError
-    
-
-class MMD(Metric):
-
-    def __init__(self, kernel):
-        self.kernel = kernel
-    
-    def __call__(self, X, Y, output_dim: int = 1):
-        """
-        :param X: numpy array of shape (n, d)
-        :param Y: numpy array of shape (m, d)
-
-        :return: numpy array of shape (1,)
-        """
-        # assert X.shape[-2] == Y.shape[-2]
-        K_XX = self.kernel(X, X) # n, n
-        K_YY = self.kernel(Y, Y) # m, m
-        K_XY = self.kernel(X, Y) # n, m
-        
-        if output_dim == 2:
-            assert X.shape[-2] == Y.shape[-2]
-            res = K_XX + K_YY - K_XY - K_XY.T
-            return res
-
-        n, m = X.shape[-2], Y.shape[-2]
-        term1 = jnp.sum(K_XX)
-        term2 = jnp.sum(K_YY)
-        term3 = jnp.sum(K_XY)
-        res = term1 / n**2 + term2 / m**2 - 2 * term3 / (n * m)
-        return res
-
-    def vstat_boot(self, X, perm):
-        # assert X.shape[-2] == Y.shape[-2]
-        K_XX = self.kernel(X, X) # n, n
-        K_XY = K_XX # n, m
-        K_YY_b = jnp.expand_dims(K_XX, 0) # 1, m, m
-        
-        perm_idx_ls = [jnp.meshgrid(ii, ii) for ii in perm]
-        perm_idx0_ls = [ii[0].T for ii in perm_idx_ls]
-        perm_idx1_ls = [ii[1].T for ii in perm_idx_ls]
-        perm_idx0 = jnp.stack(perm_idx0_ls)
-        perm_idx1 = jnp.stack(perm_idx1_ls)
-        K_XX_b = K_XX[perm_idx0, perm_idx1] # b, n, n
-
-        n = X.shape[-2]
-        perm_idx1_cross = jnp.repeat(
-            jnp.reshape(jnp.arange(n, dtype="int"), (1, -1)), repeats=n, axis=0,
-        )
-        perm_idx1_cross = jnp.expand_dims(perm_idx1_cross, 0)
-        K_XY_b = K_XY[perm_idx0, perm_idx1_cross] # b, n, m
-        K_YX_b = jnp.transpose(K_XY_b, [0, 2, 1]) # b, m, n
-
-        res = K_XX_b + K_YY_b - K_XY_b - K_YX_b # b, n, n
-        res = jnp.mean(res, [-1, -2]) # b
-        return res
-    
-    def vstat_boot_degenerate(self, X, perm):
-        K_XX = self.kernel(X, X) # n, n
-        K_XY = K_XX # n, m
-        K_YY_b = jnp.expand_dims(K_XX, 0) # 1, m, m
-        
-        perm_idx_ls = [jnp.meshgrid(ii, ii) for ii in perm]
-        perm_idx0_ls = [ii[0].T for ii in perm_idx_ls]
-        perm_idx1_ls = [ii[1].T for ii in perm_idx_ls]
-        perm_idx0 = jnp.stack(perm_idx0_ls)
-        perm_idx1 = jnp.stack(perm_idx1_ls)
-        K_XX_b = K_XX[perm_idx0, perm_idx1] # b, n, n
-
-        n = X.shape[-2]
-        perm_idx1_cross = jnp.repeat(
-            jnp.reshape(jnp.arange(n, dtype="int"), (1, -1)), repeats=n, axis=0,
-        )
-        perm_idx1_cross = jnp.expand_dims(perm_idx1_cross, 0)
-        K_XY_b = K_XY[perm_idx0, perm_idx1_cross] # b, n, m
-        K_YX_b = jnp.transpose(K_XY_b, [0, 2, 1]) # b, m, n
-
-        h_XbXb = K_XX_b + K_YY_b - K_XY_b - K_YX_b # b, n, n
-        # term1 = jnp.mean(res, [-1, -2]) # b
-
-        # 2
-        term2 = jnp.mean(h_XbXb, -1) # b, n
-        term2 = jnp.expand_dims(term2, -1) # b, n, 1
-
-        # 3
-        term3 = jnp.mean(h_XbXb, -2) # b, n
-        term3 = jnp.expand_dims(term3, -2) # b, 1, n
-
-        # # 4 is unkown; omitted for now
-        # term4 = 
-
-        res = jnp.mean(h_XbXb - term2 - term3, [-1, -2]) # b
-
-        return res
-
-    def symmetric_stat_mat(self, X, Y, Xp, Yp):
-        assert X.shape[-2] == Y.shape[-2] == Xp.shape[-2] == Yp.shape[-2]
-
-        K_XX = self.kernel(X, Xp) # n, n
-        K_YY = self.kernel(Y, Yp) # m, m
-        K_XY = self.kernel(X, Yp) # n, m
-        K_YX = self.kernel(Y, Xp) # m, n
-        res = K_XX + K_YY - K_XY - K_YX
-        return res
-
-    def vstat(self, X, Y, output_dim: int = 2):
-        K_XX = self.kernel(X, X) # n, n
-        K_YY = self.kernel(Y, Y) # m, m
-        K_XY = self.kernel(X, Y) # n, m
-
-        n, m = X.shape[-2], Y.shape[-2]
-        assert n == m, "ustat is only valid when X and Y have the same sample size."
-        vstat = K_XX + K_YY - K_XY - K_XY.T # n, n
-
-        if output_dim == 2:
-            return vstat
-            
-        return vstat / n**2
-
-    def jackknife(self, X, Y, method):
-        n = X.shape[-2]
-
-        K_XX = self.kernel(X, X)
-        K_YY = self.kernel(Y, Y)
-        K_XY = self.kernel(X, Y)
-        mmd_kernel = K_XX + K_YY - K_XY - K_XY.T
-        
-        # u-stat
-        u_stat_mat = mmd_kernel.at[jnp.diag_indices(mmd_kernel.shape[0])].set(0.)
-        u_stat = jnp.sum(u_stat_mat) / (n * (n - 1))
-
-        # jackknife
-        if method == "CLT":
-            term1 = jnp.sum(jnp.matmul(mmd_kernel.T, mmd_kernel))
-            term2_prod = jnp.dot(mmd_kernel.T, jnp.diagonal(mmd_kernel))
-            term2 = jnp.sum(term2_prod)
-            term3 = jnp.sum(mmd_kernel**2)
-            term4 = jnp.sum(jnp.diagonal(mmd_kernel)**2)
-
-            var = 4 * (term1 - 2 * term2 - term3 + 2 * term4) / (n * (n - 1) * (n - 2)) - u_stat**2
-
-        elif method == "CLT_proper":
-            term11 = jnp.sum(mmd_kernel)
-            term12 = jnp.sum(mmd_kernel, -2) # n
-            term13 = jnp.sum(jnp.diagonal(mmd_kernel)) # n
-            term14 = jnp.sum(mmd_kernel, -1) # n
-            term15 = 2 * jnp.diagonal(mmd_kernel) # n
-            term1 = (term11 - term12 - term13 - term14 + term15) / ((n- 1 ) * (n - 2))
-
-            var = (n - 1) * jnp.sum((term1 - u_stat)**2)
-
-        return u_stat, var
-
-    def test_threshold(self, n: int, X: jnp.array = None, nboot: int = 100, alpha: float = 0.05, method: str = "deviation", Y: jnp.array = None):
-        """
-        Compute the threshold for the MMD test.
-        """
-        if method == "deviation":
-            # only valid when n == m
-            K = self.kernel.UB()
-            threshold = jnp.sqrt(2 * K / n) * (1 + jnp.sqrt(- jnp.log(alpha)))
-            return threshold
-
-        elif method == "deviation_proper":
-            # only valid when n == m
-            K = self.kernel.UB()
-            threshold = jnp.sqrt(8 * K / n) * (1 + jnp.sqrt(- jnp.log(alpha)))
-            return threshold
-
-        elif method == "bootstrap":
-            wild_boot = boot.WeightedBootstrap(self)
-            # nsub = X.shape[0] // 2
-            # boot_stats, test_stat = wild_boot.compute_bootstrap(X[:nsub], X[nsub:(2*nsub)])
-
-            boot_stats, test_stat = wild_boot.compute_bootstrap(X)
-            return boot_stats, test_stat
-
-        elif method == "bootstrap_efron":
-            efron_boot = boot.EfronBootstrap(self, nboot=nboot)
-            boot_stats = efron_boot.compute_bootstrap(X, Y)
-            return boot_stats
-
-        elif method == "bootstrap_efron_full":
-            assert Y is not None, "Y must be provided for the full bootstrap."
-            efron_boot = boot.EfronBootstrap(self, nboot=nboot)
-            boot_stats_X = efron_boot.compute_bootstrap(X=X, Y=None)
-            boot_stats_Y = efron_boot.compute_bootstrap(X=Y, Y=None)
-            boot_stats = jnp.array(boot_stats_X) + jnp.array(boot_stats_Y)
-            return boot_stats
-
-        elif method == "bootstrap_efron_full_degen":
-            assert Y is not None, "Y must be provided for the full bootstrap."
-            efron_boot = boot.EfronBootstrap(self, nboot=nboot)
-            boot_stats_X = efron_boot.compute_bootstrap_degenerate(X=X, Y=None)
-            boot_stats_Y = efron_boot.compute_bootstrap_degenerate(X=Y, Y=None)
-            boot_stats = jnp.array(boot_stats_X) + jnp.array(boot_stats_Y)
-            return boot_stats
-                
-        elif method == "bootstrap_degen":
-            assert Y is not None, "Y must be provided for the full bootstrap."
-            boot_stats_X = self.compute_bootstrap(X=X)
-            boot_stats_Y = self.compute_bootstrap(X=Y)
-            boot_stats = boot_stats_X + boot_stats_Y
-            return boot_stats
-
-    def reverse_test(self, X, Y, theta: float, alpha: float = 0.05, method = "deviation"):
-        
-        if method == "CLT" or method == "CLT_proper":
-            n = X.shape[-2]
-            u_stat, var = self.jackknife(X, Y, method)
-            quantile = sci_stats.norm.ppf(alpha)
-            threshold = theta**2 + var**0.5 * quantile / jnp.sqrt(n)
-            res = float(u_stat <= threshold)
-            self.u_stat_val = u_stat
-            self.var_val = var
-            self.clt_threshold = threshold
-
-        else:
-            mmd = self(X, Y)
-            n = X.shape[-2]
-            threshold = self.test_threshold(n, alpha, method=method)
-            res = float(max(0, theta - mmd**0.5) > threshold)
-
-        return res
-
-    def compute_bootstrap(self, X, nboot: int = 1000):
-        n = X.shape[0]
-        K_XX = self.kernel(X, X)
-        
-        r = jnp.array(multinomial(n, pvals=[1/n]*n, size=nboot) - 1)
-        rr = jnp.expand_dims(r, -1) * jnp.expand_dims(r, -2)
-        
-        K_XX_boot = K_XX[jnp.newaxis] * rr
-        
-        boot = K_XX_boot.mean([-1, -2])
-        return boot
-
-class KSD(Metric):
+class KSD:
     """Class for Kernel Stein Discrepancy.
     """
     def __init__(
@@ -261,10 +19,10 @@ class KSD(Metric):
         self.k = kernel
         self.score_fn = score_fn
 
-    def __call__(self, X: jnp.array, Y: jnp.array, **kwargs):
-        return self.u_p(X, Y, **kwargs)
+    def __call__(self, X: jnp.array, **kwargs):
+        return self.u_p(X, **kwargs)
 
-    def vstat(self, X: jnp.array, Y: jnp.array, output_dim: int = 2, score: jnp.array = None):
+    def vstat(self, X: jnp.array, output_dim: int = 2, score: jnp.array = None):
         """Compute the V-statistic of the KSD.
 
         :param X: jnp.array of shape (n, dim)
@@ -273,9 +31,9 @@ class KSD(Metric):
             of shape (n, m) is returned.
         :param score: jnp.array of shape (n, dim). If provided, the score values are used to compute the KSD.
         """
-        return self.u_p(X, Y, output_dim=output_dim, vstat=True, score=score)
+        return self.u_p(X, output_dim=output_dim, vstat=True, score=score)
 
-    def u_p(self, X: jnp.array, Y: jnp.array, output_dim: int = 1, vstat: bool = False, score: jnp.array = None):
+    def u_p(self, X: jnp.array, output_dim: int = 1, vstat: bool = False, score: jnp.array = None):
         """Compute the KSD
 
         :param X: jnp.array of shape (n, dim)
@@ -291,11 +49,13 @@ class KSD(Metric):
         elif score is not None:
             assert score.shape == X.shape
             score_X = score
-            score_Y = score # jnp.copy(score)
+            score_Y = score
         else:
             score_X = self.score_fn(X) # n x dim
-            score_Y = self.score_fn(Y) # m x dim
+            score_Y = score_X # m x dim
             assert score_X.shape == X.shape
+
+        Y = X
 
         # median heuristic
         if self.k.med_heuristic:
@@ -352,7 +112,7 @@ class KSD(Metric):
             theta: float = None, 
             alpha: float = 0.05, 
             nboot: int = 500,
-            compute_tau: bool = True, 
+            tau_infty: Union[float, bool] = "auto", 
             wild: bool = False,
         ):
         """
@@ -361,135 +121,35 @@ class KSD(Metric):
         # compute bootstrap quantile
         bootstrap = boot.WeightedBootstrap(self, ndraws=nboot)
         
-        boot_stats_degen, vstat = bootstrap.compute_bootstrap(X, X, score=score, wild=wild)
-        boot_stats_degen = jnp.concatenate([boot_stats_degen, jnp.array([vstat])])
+        boot_stats, vstat = bootstrap.compute_bootstrap(X, score=score, wild=wild)
+        boot_stats = jnp.concatenate([boot_stats, jnp.array([vstat])])
 
-        # compute tau and theta
-        if compute_tau:
+        # set theta
+        if tau_infty == "auto":
+            # compute tau
             assert eps0 is not None, "eps0 must be provided to compute theta."
-            tau = jnp.max(bootstrap.gram_mat)
-            theta = eps0 * tau**0.5
-            self.tau = tau
+            tau_infty = jnp.max(bootstrap.gram_mat)
         
+        theta = eps0 * tau_infty**0.5
+        self.tau = tau_infty
         self.theta = theta
 
         # p-value for standard test
-        pval_standard = jnp.mean(boot_stats_degen >= vstat)
+        pval_standard = jnp.mean(boot_stats >= vstat)
 
         # quantile for boot degen
-        boot_stats_nonsq = boot_stats_degen**0.5
-        q_degen_nonsq = jnp.percentile(boot_stats_nonsq, 100 * (1 - alpha))
-        pval_degen = jnp.mean(boot_stats_nonsq >= vstat**0.5 - self.theta)
+        boot_stats_nonsq = boot_stats**0.5
+        q_nonsq = jnp.percentile(boot_stats_nonsq, 100 * (1 - alpha))
+        pval = jnp.mean(boot_stats_nonsq >= vstat**0.5 - self.theta)
 
         res = {
-            "q_degen_nonsq": q_degen_nonsq, 
+            "q_nonsq": q_nonsq, 
             "pval_standard": pval_standard, 
             "vstat": vstat, 
-            "pval_degen": pval_degen, 
+            "pval": pval, 
             "gram_mat": bootstrap.gram_mat,
             "theta": theta, 
-            "tau": tau,
+            "tau": self.tau,
         }
 
         return res
-
-    def jackknife(self, X, score=None, hvp=None):
-        n = X.shape[-2]
-
-        u_p = self.vstat(X, X, output_dim=2, score=score, hvp=hvp) # n, n
-        
-        # u-stat
-        u_stat_mat = u_p.at[jnp.diag_indices(u_p.shape[0])].set(0.)
-        u_stat = jnp.sum(u_stat_mat) / (n * (n - 1))
-
-        # # v-stat
-        # v_stat = jnp.sum(u_p) / n**2
-
-        # 1. jackknife
-        term11 = jnp.sum(u_p)
-        term12 = jnp.sum(u_p, -2) # n
-        term13 = jnp.sum(jnp.diagonal(u_p)) # n
-        term14 = jnp.sum(u_p, -1) # n
-        term15 = 2 * jnp.diagonal(u_p) # n
-        term1 = (term11 - term12 - term13 - term14 + term15) / ((n - 1 ) * (n - 2))
-
-        var = (n - 1) * jnp.sum((term1 - u_stat)**2) + 1e-12
-
-        # # 2. standard
-        # witness = jnp.sum(u_p, axis=1) / n # n
-        # term1 = jnp.sum(witness**2) / n
-        # term2 = (jnp.mean(u_p))**2
-        # var = term1 - term2 + 1e-12
-
-        return var
-
-    def eval_single_arg(self, X, score=None, hvp=None):
-        idx = jnp.arange(X.shape[0])
-        if hvp is not None:
-            res = jax.vmap(
-                lambda i: self._eval_single_arg(X[[i], :], score[[i], :], hvp[[i], :])
-            )(idx)
-
-        else:
-            res = jax.vmap(
-                lambda i: self._eval_single_arg(X[[i], :], score[[i], :])
-            )(idx)
-
-        return res
-
-    def _eval_single_arg(self, x, score, hvp=None):
-        return self.__call__(x, x, score=score, hvp=hvp, vstat=True)
-
-
-class KSdistance(Metric):
-    def __init__(self):
-        pass
-
-    def __call__(self, X: jnp.array, Y: jnp.array):
-        if X.ndim > 1: 
-            assert X.shape[-1] == 1
-        if Y.ndim > 1:
-            assert Y.shape[-1] == 1
-
-        return sci_stats.ks_2samp(X.reshape((-1,)), Y.reshape((-1,)))[0]
-
-    def test_threshold(self, X: jnp.array = None, alpha: float = 0.05, method: str = "deviation",
-                       n_approx: int = 1000):
-        """
-        Compute the threshold for the MMD test.
-        """
-        n = X.shape[0]
-        if n <= 10:
-            # use exact distribution
-            sn_samples = sci_stats.kstwo.rvs(n=n, size=(n_approx * 2,))
-        else:
-            # use asymptotic distribution
-            sn_samples = sci_stats.kstwobign.rvs(size=(n_approx * 2,)) / jnp.sqrt(n)
-
-        if method == "deviation":
-
-            sn_samples = sn_samples[:n_approx] + sn_samples[n_approx:]
-            threshold = jnp.percentile(sn_samples, 100 * (1 - alpha))
-            
-            return threshold, sn_samples
-
-    def reverse_test(self, X, Y, theta: float, alpha: float = 0.05, method = "deviation",
-                    return_all: bool = False, beta: float = None, theta_prime: float = None):
-        
-        if method == "deviation":
-            val = self(X, Y)
-            threshold, _ = self.test_threshold(X=X, alpha=alpha, method=method)
-            res = float(max(0, theta - val) > threshold)
-
-        elif method == "deviation_auto":
-            val = self(X, Y)
-            threshold, sn_samples = self.test_threshold(X=X, alpha=alpha, method="deviation")
-            gamma_beta = jnp.percentile(sn_samples, 100 * (1 - beta))
-            theta = theta_prime + threshold + gamma_beta
-            self.theta = theta
-            res = float(max(0, theta - val) > threshold)
-
-        if not return_all:
-            return res
-        else:
-            return res, val, threshold

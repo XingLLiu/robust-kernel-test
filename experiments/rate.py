@@ -76,10 +76,9 @@ if __name__ == "__main__":
     for n in n_ls:
         
         res_ms[ol][n] = exp_utils.run_tests(
-            samples=X_res[ol][n], scores=score_res[ol][n], 
-            hvps=None, hvp_denom_sup=None, 
-            bw="med", alpha=0.05, verbose=True,
-            compute_tau=True, eps0=eps0,
+            samples=X_res[ol][n], 
+            scores=score_res[ol][n], 
+            eps0=eps0,
         )
 
     # 3. save results

@@ -204,7 +204,7 @@ def ksdagg(
                 base_kernel = kernel(sigma_sq=bandwidth ** 2)
                 kernel_fn = kernels.TiltedKernel(kernel=base_kernel, weight_fn=weight_fn)
                 ksd = KSD(kernel=kernel_fn)
-                H = ksd(X, X, score=score_X, output_dim=2, vstat=False)
+                H = ksd(X, score=score_X, output_dim=2, vstat=False)
                 H = H.at[jnp.diag_indices(H.shape[0])].set(0)
                 M = M.at[i].set(jnp.sum(R * (H @ R), 0) / (m * (m - 1))) # (B1+B2+1, ) wild bootstrap KSD estimates
 

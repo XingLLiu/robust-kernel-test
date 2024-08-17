@@ -94,12 +94,12 @@ if __name__ == "__main__":
                 
             for eps in eps_ls:
                 res[bw][ol_key][eps] = exp_utils.run_tests(
-                    samples=X_res[ol][eps], scores=score_res[ol][eps], hvps=None,
-                    hvp_denom_sup=None,
-                    # theta="ol", eps0=eps0, 
-                    bw=bw, alpha=0.05, verbose=True,
-                    run_ksdagg=run_ksdagg, ksdagg_bw=ksdagg_bw,
-                    compute_tau=True, eps0=eps0,
+                    samples=X_res[ol][eps], 
+                    scores=score_res[ol][eps],
+                    eps0=eps0,
+                    bw=bw, 
+                    run_ksdagg=run_ksdagg, 
+                    ksdagg_bw=ksdagg_bw,
                 )
 
     # 3. save results

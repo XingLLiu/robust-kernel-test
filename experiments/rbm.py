@@ -24,7 +24,7 @@ Path(SAVE_DIR).mkdir(exist_ok=True, parents=True)
 
 def minus_stein_kernel(x, ksd):
     s = ksd.score_fn(x)
-    return -ksd(x, x, score=s, vstat=True)
+    return -ksd(x, score=s, vstat=True)
 
 def optimize(init_val, fn, maxiter):
     solver = jaxopt.LBFGS(fun=lambda x: minus_stein_kernel(x, fn), maxiter=maxiter)
@@ -107,7 +107,6 @@ if __name__ == "__main__":
     score_res = pickle.load(open(os.path.join(SAVE_DIR, f"score_res_n{args.n}_seed{args.seed}.pkl"), "rb"))
 
     print("start testing")
-    bw = "med"
     weight_fn_args = {"loc": jnp.zeros((args.dim,))}
     eps0 = .1
     
@@ -118,11 +117,11 @@ if __name__ == "__main__":
         scores = score_res[eps]
 
         res[eps] = exp_utils.run_tests(
-            samples=Xs, scores=scores, hvps=None, hvp_denom_sup=None, 
-            # theta=theta, 
-            bw=bw, alpha=0.05, verbose=True, base_kernel="IMQ", weight_fn_args=weight_fn_args,
-            compute_tau=True, eps0=eps0, 
-            timetest=True
+            samples=Xs, 
+            scores=scores, 
+            eps0=eps0, 
+            weight_fn_args=weight_fn_args,
+            timetest=True,
         )
 
     # 3. save results

@@ -106,14 +106,16 @@ if __name__ == "__main__":
             if args.run_lq == False:
                 suffix = "" if not args.wild else "_wild"
                 res_ms[ol][eps] = exp_utils.run_tests(
-                    samples=X_res[ol][eps], scores=score_res[ol][eps], 
-                    hvps=None, hvp_denom_sup=None, 
-                    bw="med", alpha=0.05, verbose=True,
+                    samples=X_res[ol][eps], 
+                    scores=score_res[ol][eps], 
+                    eps0=eps0, 
+                    bw="med", 
                     run_ksdagg=bool(args.run_ksdagg),
                     run_dev=True, 
-                    run_dcmmd=True, samples_p=X_model_res[ol][eps], 
+                    samples_p=X_model_res[ol][eps], 
+                    run_dcmmd=True, 
                     run_devmmd=True,
-                    compute_tau=True, eps0=eps0, wild=args.wild,
+                    wild=args.wild,
                 )
             
             else:

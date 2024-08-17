@@ -216,7 +216,7 @@ def compute_ksd(x, score, ksd):
     """
     x = x.reshape((-1, 1))
     score = score.reshape((-1, 1))
-    return jnp.squeeze(ksd(x, x, score=score, vstat=True, output_dim=2))
+    return jnp.squeeze(ksd(x, score=score, vstat=True, output_dim=2))
 
 
 SAVE_DIR = "data/kef"
@@ -378,9 +378,10 @@ if __name__ == "__main__":
                 scores = score_res[eps][ol_mean]
 
                 res[eps][ol_mean] = exp_utils.run_tests(
-                    samples=Xs, scores=scores, hvps=None, hvp_denom_sup=None, 
-                    bw=bw, alpha=0.05, verbose=True, base_kernel="IMQ", weight_fn_args=None,
-                    compute_tau=True, eps0=eps0,    
+                    samples=Xs, 
+                    scores=scores, 
+                    eps0=eps0,    
+                    bw=bw, 
                 )
 
     elif args.exp == "power":
@@ -390,9 +391,10 @@ if __name__ == "__main__":
             scores = score_res[param]
 
             res[param] = exp_utils.run_tests(
-                samples=Xs, scores=scores, hvps=None, hvp_denom_sup=None, 
-                bw=bw, alpha=0.05, verbose=True, base_kernel="IMQ", weight_fn_args=None,
-                compute_tau=True, eps0=eps0,
+                samples=Xs, 
+                scores=scores, 
+                eps0=eps0,
+                bw=bw, 
             )
 
     # 3. save results
