@@ -1,4 +1,6 @@
 # Code for Robust-KSD Test
+![](figs/summary_table.png)
+
 This repository contains the code for reproducing the experiments in the paper 
 - [Liu, X. and Briol, F.X., 2024. On the Robustness of Kernel Goodness-of-Fit Tests. arXiv preprint arXiv:2408.05854.](https://arxiv.org/abs/2408.05854)
 
