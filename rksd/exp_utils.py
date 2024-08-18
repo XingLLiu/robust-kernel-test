@@ -69,9 +69,6 @@ def change_theta(
         if mm == "tilted_r_boot" or mm == "tilted_r_dev":
             res[mm]["rej"] = [int(max(0, stat**0.5 - tt) > gam) for stat, gam, tt in zip(res[mm]["stat"], res[mm]["gamma"], thetas)]
 
-        elif mm == "tilted_r_bootmax":
-            res[mm]["rej"] = [int(stat > gam**2 + tt**2) for stat, gam, tt in zip(res[mm]["stat"], res[mm]["gamma"], thetas)]
-
         elif mm == "devmmd":
             tau_mmd = 2.
             theta_mmd = eps0 * np.sqrt(tau_mmd)
