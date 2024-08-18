@@ -129,10 +129,12 @@ class KSD:
             # compute tau
             assert eps0 is not None, "eps0 must be provided to compute theta."
             tau_infty = jnp.max(bootstrap.gram_mat)
+            self.tau = tau_infty
         
-        theta = eps0 * tau_infty**0.5
-        self.tau = tau_infty
-        self.theta = theta
+        if not isinstance(theta, float):
+            self.theta = eps0 * tau_infty**0.5
+        else:
+            self.theta = theta
 
         # p-value for standard test
         pval_standard = jnp.mean(boot_stats >= vstat)
@@ -147,8 +149,7 @@ class KSD:
             "pval_standard": pval_standard, 
             "vstat": vstat, 
             "pval": pval, 
-            "gram_mat": bootstrap.gram_mat,
-            "theta": theta, 
+            "theta": self.theta, 
             "tau": self.tau,
         }
 

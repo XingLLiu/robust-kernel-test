@@ -29,8 +29,12 @@ def sample_outlier_contam(
     else:
         outliers = ol_mean
     idx = np.random.choice(range(n), size=ncontam, replace=False) # ncontam
-    X = X.at[idx].set(outliers)
-    
+
+    if isinstance(X, jnp.ndarray):
+        X = X.at[idx].set(outliers)
+    elif isinstance(X, np.ndarray):
+        X[idx] = outliers
+
     if not return_ol:
         return X
     else:
@@ -83,7 +87,7 @@ def change_theta(
 def run_tests(
         samples: jnp.array, 
         scores: jnp.array, 
-        theta: Union[float, str] = "ol", 
+        theta: float = None, 
         eps0: float = None, 
         tau_infty: Union[float, str] = "auto",
         bw: Union[float, str] = "med", 
