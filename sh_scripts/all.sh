@@ -32,7 +32,15 @@ echo rate >> test.txt
 sh sh_scripts/rate.sh
 date >> test.txt
 
+echo weight >> test.txt
+sh sh_scripts/weight.sh
+date >> test.txt
+
 echo tail >> test.txt
 sh sh_scripts/tail.sh
+date >> test.txt
+
+echo tau_infty >> test.txt
+sh sh_scripts/tau_infty.sh
 date >> test.txt
 

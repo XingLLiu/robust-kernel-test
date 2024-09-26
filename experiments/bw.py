@@ -18,9 +18,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--n", type=int)
     parser.add_argument("--d", type=int, default=1)
-    parser.add_argument("--nrep", type=int)
+    parser.add_argument("--nrep", type=int) 
     parser.add_argument("--gen", type=bool, default=True)
     parser.add_argument("--exp", type=str, default="ol")
+    parser.add_argument("--ksdagg_kernel", type=str, default="imq")
     args = parser.parse_args()
 
     np.random.seed(2024)
@@ -31,7 +32,7 @@ if __name__ == "__main__":
     if args.exp == "eps":
         ol_ls = [10.]
 
-        eps_ls = [0., 0.01, 0.05, 0.075, 0.1, 0.125, 0.15, 0.2]
+        eps_ls = [0., 0.025, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5]
     
     elif args.exp == "ol":
         ol_ls = [0.1, 1., 10., 25., 50., 100.]
@@ -99,6 +100,7 @@ if __name__ == "__main__":
                     bw=bw, 
                     run_ksdagg=run_ksdagg, 
                     ksdagg_bw=ksdagg_bw,
+                    ksdagg_kernel=args.ksdagg_kernel,
                 )
 
     # 3. save results

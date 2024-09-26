@@ -1,1 +1,2 @@
-taskset -c 20-25 python3 experiments/bw.py --n=100 --nrep=100 --d=50 --gen=True --exp=eps
+# taskset -c 20-25 python3 experiments/bw.py --n=500 --nrep=100 --d=1 --gen=True --exp=eps --ksdagg_kernel=tilted
+taskset -c 20-25 python3 experiments/bw.py --n=500 --nrep=100 --d=1 --gen=True --exp=ol --ksdagg_kernel=imq

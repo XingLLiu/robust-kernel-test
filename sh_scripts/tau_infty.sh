@@ -1,0 +1,1 @@
+taskset -c 20-25 python3 experiments/tau_infty.py --dim=1 --nrep=100 --gen=True

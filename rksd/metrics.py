@@ -19,8 +19,8 @@ class KSD:
         self.k = kernel
         self.score_fn = score_fn
 
-    def __call__(self, X: jnp.array, **kwargs):
-        return self.u_p(X, **kwargs)
+    def __call__(self, X: jnp.array, Y: jnp.array, **kwargs):
+        return self.u_p(X, Y, **kwargs)
 
     def vstat(self, X: jnp.array, output_dim: int = 2, score: jnp.array = None):
         """Compute the V-statistic of the KSD.
@@ -31,9 +31,9 @@ class KSD:
             of shape (n, m) is returned.
         :param score: jnp.array of shape (n, dim). If provided, the score values are used to compute the KSD.
         """
-        return self.u_p(X, output_dim=output_dim, vstat=True, score=score)
+        return self.u_p(X, X, output_dim=output_dim, vstat=True, score=score)
 
-    def u_p(self, X: jnp.array, output_dim: int = 1, vstat: bool = False, score: jnp.array = None):
+    def u_p(self, X: jnp.array, Y: jnp.array, output_dim: int = 1, vstat: bool = False, score: jnp.array = None):
         """Compute the KSD
 
         :param X: jnp.array of shape (n, dim)
@@ -54,8 +54,6 @@ class KSD:
             score_X = self.score_fn(X) # n x dim
             score_Y = score_X # m x dim
             assert score_X.shape == X.shape
-
-        Y = X
 
         # median heuristic
         if self.k.med_heuristic:
@@ -127,11 +125,11 @@ class KSD:
         # set theta
         if tau_infty == "auto":
             # compute tau
-            assert eps0 is not None, "eps0 must be provided to compute theta."
             tau_infty = jnp.max(bootstrap.gram_mat)
             self.tau = tau_infty
         
         if not isinstance(theta, float):
+            assert eps0 is not None, "eps0 must be provided to compute theta."
             self.theta = eps0 * tau_infty**0.5
         else:
             self.theta = theta

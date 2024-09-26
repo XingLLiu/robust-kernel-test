@@ -1,1 +1,1 @@
-taskset -c 20-25 python3 experiments/weight.py --n=500 --nrep=100 --d=1 --gen=True
+taskset -c 20-25 python3 experiments/weight.py --n=500 --nrep=200 --d=1 --gen=True

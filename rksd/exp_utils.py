@@ -94,6 +94,7 @@ def run_tests(
         base_kernel: str = "IMQ", 
         run_ksdagg: bool = False, 
         ksdagg_bw: float = None, 
+        ksdagg_kernel: str = "imq",
         run_dev: bool = False, 
         run_devmmd: bool = False, 
         run_dcmmd: bool = False, 
@@ -118,6 +119,7 @@ def run_tests(
     :param base_kernel: str. The base kernel to use. Either "IMQ" or "RBF".
     :param run_ksdagg: bool. If True, run the KSDAgg test.
     :param ksdagg_bw: float. The bandwidth to use in the KSDAgg test. If None, the default choice in Schrab et al. (2024) is used.
+    :param ksdagg_kernel: str. The kernel to use in the KSDAgg test. Either "imq" or "tilted".
     :param run_dev: bool. If True, run the KSD-Dev test.
     :param run_devmmd: bool. If True, run the MMD-Dev test.
     :param run_dcmmd: bool. If True, run the dcMMD test.
@@ -140,8 +142,6 @@ def run_tests(
 
     # weighting function
     weight_fn_args = {} if weight_fn_args is None else weight_fn_args
-
-    weight_fn_class = kernels.PolyWeightFunction
 
     # base kernel
     if base_kernel == "IMQ":
@@ -177,7 +177,7 @@ def run_tests(
         ksd = metrics.KSD(kernel)
         wild_boot = boot.WeightedBootstrap(ksd)
         pval, vstat, boot_stats = wild_boot.pval(X, return_stat=True, return_boot=True, score=score)
-        ustat = ksd(X, vstat=False, score=score)
+        ustat = ksd(X,  X, vstat=False, score=score)
         res["standard"]["stat"].append(vstat)
         res["standard"]["nonsq_stat"].append(vstat**0.5)
         res["standard"]["u_stat"].append(ustat)
@@ -186,12 +186,12 @@ def run_tests(
         res["standard"]["boot_stats"].append(boot_stats)
 
         # 2. tilted
-        weight_fn = weight_fn_class(**weight_fn_args)    
+        weight_fn = kernels.PolyWeightFunction(**weight_fn_args)
         kernel0 = base_kernel_class(**kernel_args)
         kernel = kernels.TiltedKernel(kernel=kernel0, weight_fn=weight_fn)
 
         ksd = metrics.KSD(kernel)
-        ustat = ksd(X, vstat=False, score=score)
+        ustat = ksd(X, X, vstat=False, score=score)
         if timetest:
             time0 = time.time()
         
@@ -245,9 +245,12 @@ def run_tests(
 
         # 5. ksdagg
         if run_ksdagg:
-            rej_ksdagg, summary_ksdagg = src_ksdagg.ksdagg(X, score, bandwidths=ksdagg_bw, return_dictionary=True)
+            rej_ksdagg, summary_ksdagg = src_ksdagg.ksdagg(
+                X, score, bandwidths=ksdagg_bw, return_dictionary=True, kernel=ksdagg_kernel,
+            )
             res["ksdagg"]["rej"].append(rej_ksdagg.item())
             res["ksdagg"]["summary"].append(summary_ksdagg)
+            res["ksdagg"]["kernel"] = ksdagg_kernel
 
         # two-sample tests
         if run_devmmd or run_dcmmd:

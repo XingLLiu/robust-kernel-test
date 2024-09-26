@@ -4,7 +4,6 @@ import pickle
 import os
 
 import rksd.exp_utils as exp_utils
-from experiments.ol import sample_outlier_contam
 
 from pathlib import Path
 import argparse
@@ -51,7 +50,7 @@ if __name__ == "__main__":
         
         for eps in eps_ls:
             Xs = np.random.multivariate_normal(mean_data, np.eye(dim), (args.nrep, args.n)) # nrep, n, 1
-            Xs = jax.vmap(lambda x: sample_outlier_contam(x, eps, ol))(Xs)
+            Xs = jax.vmap(lambda x: exp_utils.sample_outlier_contam(x, eps, ol, ol_std=0.))(Xs)
             assert Xs.shape == (args.nrep, args.n, dim)
 
             X_res[ol_key][eps] = Xs
@@ -88,9 +87,11 @@ if __name__ == "__main__":
             theta = 0. # set to 0 as only interested in the standard test
 
             res[b][ol][eps] = exp_utils.run_tests(
-                samples=X_res[ol][eps], scores=score_res[ol][eps], hvps=None, hvp_denom_sup=None,
+                samples=X_res[ol][eps], 
+                scores=score_res[ol][eps],
+                theta=theta,
+                bw="med", 
                 weight_fn_args=weight_fn_args,
-                theta=theta, bw="med", alpha=0.05, verbose=True,
             )
 
     # 3. save results

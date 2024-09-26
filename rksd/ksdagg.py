@@ -33,7 +33,6 @@ def ksdagg(
     seed=42,
     return_dictionary=False,
     bandwidths=None,
-    weight_fn=None
 ):
     """
     Goodness-of-fit KSDAgg test. 
@@ -201,10 +200,11 @@ def ksdagg(
                 H = score_X @ score_X.T * kxy + dkxy + d2kxy
                 H = H.at[jnp.diag_indices(H.shape[0])].set(0)
                 M = M.at[i].set(jnp.sum(R * (H @ R), 0) / (m * (m - 1))) # (B1+B2+1, ) wild bootstrap KSD estimates
-        else:
+        elif kernel == "tilted":
             for i in range(number_bandwidths):
                 bandwidth = bandwidths[i]
-                base_kernel = kernel(sigma_sq=bandwidth ** 2)
+                base_kernel = kernels.IMQ(sigma_sq=bandwidth ** 2)
+                weight_fn = kernels.PolyWeightFunction()
                 kernel_fn = kernels.TiltedKernel(kernel=base_kernel, weight_fn=weight_fn)
                 ksd = KSD(kernel=kernel_fn)
                 H = ksd(X, score=score_X, output_dim=2, vstat=False)
