@@ -86,7 +86,7 @@ class KSD:
         u_p = term1_mat + term2_mat + term3_mat + term4_mat
 
         if not vstat:
-            # extract diagonal
+            # remove diagonal
             u_p = u_p.at[jnp.diag_indices(u_p.shape[0])].set(0.)
             denom = (X.shape[-2] * (Y.shape[-2]-1))
         else:
@@ -100,7 +100,73 @@ class KSD:
             return u_p
 
     def compute_deviation_threshold(self, n, tau, alpha):
+        """Compute the threshold using McDiarmid's bound."""
         return jnp.sqrt(tau / n) + jnp.sqrt(- 2 * tau * (jnp.log(alpha)) / n)
+    
+    def compute_wolfer_threshold(self, X, tau, alpha):
+        """Compute the threshold using
+        
+        Geoffrey Wolfer and Pierre Alquier. Variance-aware estimation of kernel mean
+         embedding. arXiv preprint arXiv:2210.06672, 2022.
+
+        """
+        n = X.shape[0]
+        v_hat = _wolfer_var_estimate(X, self.k, tau)
+        x0 = jnp.zeros((1, 1))
+        delta_diag_k = self.k.base_kernel(x0, x0).item() # assuming sup_x w(x) = 1
+        res = (
+            jnp.sqrt(2 * (v_hat + delta_diag_k) * jnp.log(4 / alpha) / n)
+            + (
+                16/3 * jnp.sqrt(tau) 
+                + 2 * jnp.sqrt(2) * jnp.sqrt(delta_diag_k)
+            ) * (jnp.log(4 / alpha) / n)
+        )
+        return res
+
+    def compute_pinelis_threshold(self, n, tau, alpha):
+        """Compute the threshold using Pinelis's bound.
+        
+        Antoine Chatalic, Nicolas Schreuder, Lorenzo Rosasco, and Alessandro Rudi. Nyström 
+         kernel mean embeddings. In ICML, pages 3006–3024. PMLR, 2022.
+
+        """
+        return jnp.sqrt((tau / n) * 8 * jnp.log(2 / alpha))
+
+    def compute_empirical_bernstein_threshold(self, X, score, tau, alpha, c1=0.5, lambda_val=None):
+        """Compute the threshold using 
+        
+        Diego Martinez-Taboada and Aaditya Ramdas. Empirical Bernstein in smooth Banach
+         spaces. arXiv preprint arXiv:2409.06060, 2024.
+
+        """
+        n = X.shape[0]
+        B = tau**0.5
+        c2 = 1/4
+        if lambda_val is None:
+            sum_sq = self._eb_sum_sq(X, score)
+            # print("sum_sq", sum_sq)
+            sigma_sq = (c2 * B**2 + sum_sq) / n
+            lambda_val = min(
+                jnp.sqrt(2 * (4 * B)**2 * jnp.log(2 / alpha) / (sigma_sq * n)),
+                c1,
+            )
+
+        psi_lambda = - jnp.log(1 - lambda_val) - lambda_val
+        res = (
+            (4 * B)**(-1) * psi_lambda * sum_sq + 4 * B * jnp.log(2 / alpha)
+        ) / (n * lambda_val)
+        return res
+
+    def _eb_sum_sq(self, X, score):
+        up_mat = self.u_p(X, X, output_dim=2, score=score, vstat=True)
+        s = up_mat[0, 0]
+        for i in range(1, X.shape[0]):
+            term1 = up_mat[i, i]
+            term2 = 2 * jnp.mean(up_mat[i, :i])
+            term3 = jnp.mean(up_mat[:i, :i])
+            s += term1 - term2 + term3
+
+        return s
 
     def test_threshold(
             self, 
@@ -152,3 +218,11 @@ class KSD:
         }
 
         return res
+
+
+def _wolfer_var_estimate(X, kernel, tau_infty):
+    """"""
+    n = X.shape[0]
+    K_XX = kernel(X, X)
+    res = tau_infty - jnp.sum(K_XX.at[jnp.diag_indices(n)].set(0.)) / (n * (n - 1))
+    return res

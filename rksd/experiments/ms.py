@@ -56,8 +56,8 @@ if __name__ == "__main__":
         print("Saved to", SAVE_DIR)
 
     else:
-        X_res = pickle.load(open(os.path.join(SAVE_DIR, f"X_res_n500.pkl"), "rb"))
-        score_res = pickle.load(open(os.path.join(SAVE_DIR, f"score_res_n500.pkl"), "rb"))
+        X_res = pickle.load(open(os.path.join(SAVE_DIR, f"X_res_n{args.n}_d{args.d}.pkl"), "rb"))
+        score_res = pickle.load(open(os.path.join(SAVE_DIR, f"score_res_n{args.n}_d{args.d}.pkl"), "rb"))
 
     # 2. run experiment
     eps0 = 0.05

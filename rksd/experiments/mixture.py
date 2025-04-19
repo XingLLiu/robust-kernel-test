@@ -6,6 +6,7 @@ import os
 from tqdm import tqdm
 
 import rksd.exp_utils as exp_utils
+# import rksd.models as models
 
 from pathlib import Path
 import argparse
@@ -90,12 +91,12 @@ if __name__ == "__main__":
             means[scale] = mean_ls
 
             # define score function
-            score_fn = make_score(mean_ls, model_ratio_ls, std)
+            score_fn = models.make_score(mean_ls, model_ratio_ls, std)
 
             Xs = jnp.empty((args.nrep, args.n, dim), dtype=jnp.float32)
             scores = jnp.empty((args.nrep, args.n, dim), dtype=jnp.float32)
             for i in range(args.nrep):
-                X = sample_mixture(args.n, mean_ls, data_ratio_ls, std)
+                X = models.sample_mixture(args.n, mean_ls, data_ratio_ls, std)
                 Xs = Xs.at[i].set(X)
 
                 score = score_fn(X)

@@ -19,27 +19,41 @@ def sample_outlier_contam(
         ol_mean: float, 
         ol_std: float, 
         return_ol: bool = False,
+        key = None,
     ):
-    """
+    """Sample outliers and inject into data.
     """
     n, d = X.shape[0], X.shape[1]
-    ncontam = int(n * eps)
-    if ol_std > 0:
-        outliers = np.random.multivariate_normal(mean=ol_mean, cov=np.eye(d)*ol_std, size=ncontam)
-    else:
-        outliers = ol_mean
-    idx = np.random.choice(range(n), size=ncontam, replace=False) # ncontam
+    
+    if key is None:
+        # numpy version
+        ncontam = int(n * eps)
+        if ol_std > 0:
+            outliers = np.random.multivariate_normal(mean=ol_mean, cov=np.eye(d)*ol_std, size=ncontam)
+        else:
+            outliers = ol_mean
+        idx = np.random.choice(range(n), size=ncontam, replace=False) # ncontam
 
-    if isinstance(X, jnp.ndarray):
-        X = X.at[idx].set(outliers)
-    elif isinstance(X, np.ndarray):
-        X[idx] = outliers
+        if isinstance(X, jnp.ndarray):
+            X = X.at[idx].set(outliers)
+        elif isinstance(X, np.ndarray):
+            X[idx] = outliers
+
+    else:
+        # jax version 
+        n, d = X.shape[0], X.shape[1]
+        if ol_std > 0:
+            outliers = jax.random.multivariate_normal(key, mean=ol_mean, cov=np.eye(d)*ol_std, size=n)
+        else:
+            outliers = ol_mean
+
+        mask = jax.random.bernoulli(key, eps, size=(n,)).reshape([n, d])
+        X = jnp.where(mask, outliers, X)
 
     if not return_ol:
         return X
     else:
         return X, outliers
-
 
 def change_theta(
         res: dict, 
@@ -109,7 +123,7 @@ def run_tests(
     :param samples: (nrep, n, d) array of samples.
     :param scores: (nrep, n, d) array of scores.    
     :param theta: float or str. If float, the value of theta to use in the test. If "ol", use \theta = \epsilon_0 \tau_\infty^{1/2}.
-    :param eps0: float. The value of epsilon_0 to use in the test. In this case, `theta` must be "ol". 
+    :param eps0: float. The epsilon_0 in the paper, namely the maximal contamination ratio in the data. In specified, `theta` must be "ol". 
     :param tau_infty: float. The value of tau_\infty to use in the robust-KSD test. If "auto", compute the value from the data 
         as \tau_\infty \approx \max_{i,j} u_p(X_i, X_j).
     :param bw: float or str. If float, the value of the bandwidth to use in the test. If "med", use the median heuristic.
@@ -132,7 +146,7 @@ def run_tests(
     """
     res = {
         "standard": {"nonsq_stat": [], "stat": [], "u_stat": [], "pval": [], "rej": [], "boot_stats": []},
-        "tilted": {"nonsq_stat": [], "stat": [], "u_stat": [], "pval": [], "rej": [], "boot_stats": []},
+        "tilted": {"nonsq_stat": [], "stat": [], "u_stat": [], "pval": [], "rej": [], "boot_stats": [], "eps0": []},
         "tilted_r_boot": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": [], "pval": [], "tau": [], "time": []},
         "tilted_r_dev": {"nonsq_stat": [], "stat": [], "u_stat": [], "threshold": [], "rej": [], "theta": [], "gamma": []},
     }
@@ -220,6 +234,7 @@ def run_tests(
         res["tilted"]["u_stat"].append(ustat)
         res["tilted"]["pval"].append(pval_standard)
         res["tilted"]["rej"].append(int(pval_standard < alpha))
+        res["tilted"]["eps0"].append(eps0)
         
         # 3. robust-KSD
         res["tilted_r_boot"]["stat"].append(vstat)
