@@ -180,7 +180,7 @@ class KSD:
             wild: bool = False,
         ):
         """
-        Compute the threshold for the robust test. Threshold = \gamma + \theta.
+        Compute the threshold for the robust test. Threshold = \\gamma + \\theta.
         """
         # compute bootstrap quantile
         bootstrap = boot.WeightedBootstrap(self, ndraws=nboot)

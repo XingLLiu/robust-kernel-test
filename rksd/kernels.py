@@ -3,7 +3,7 @@ import jax.numpy as jnp
 
 
 def l2norm(X: jnp.array, Y: jnp.array):
-    """Compute \|X - Y\|_2^2 of tensors X, Y
+    """Compute \\|X - Y\\|_2^2 of tensors X, Y
     
     :param X: Tensors of shape (..., n, dim)
     :param Y: Tensors of shape (..., m, dim)
@@ -18,9 +18,9 @@ def l2norm(X: jnp.array, Y: jnp.array):
     return dnorm2
 
 def median_heuristic(dnorm2: jnp.array):
-    """Compute median heuristic med(\|X_i - X_j\|_2^2, 1 \leq i < j \leq n).
+    """Compute median heuristic med(\\|X_i - X_j\\|_2^2, 1 \leq i < j \leq n).
     
-    :param dnorm2: (n, n) tensor of \|X - Y\|_2^2
+    :param dnorm2: (n, n) tensor of \\|X - Y\\|_2^2
     """
     ind_array = jnp.triu(jnp.ones_like(dnorm2), k=1) == 1
     med_heuristic = jnp.percentile(dnorm2[ind_array], 50.0)
@@ -29,9 +29,9 @@ def median_heuristic(dnorm2: jnp.array):
 class Kernel(object):
     """A kernel class need to have the following methods:
         __call__: k(x, y)
-        grad_first: \nabla_x k(x, y)
-        grad_second: \nabla_y k(x, y)
-        gradgrad: \nabla_x \nabla_y k(x, y)
+        grad_first: \\nabla_x k(x, y)
+        grad_second: \\nabla_y k(x, y)
+        gradgrad: \\nabla_x \\nabla_y k(x, y)
     """
 
     def __call__(self, X: jnp.array, Y: jnp.array):
@@ -45,7 +45,7 @@ class Kernel(object):
         raise NotImplementedError
     
     def grad_first(self, X: jnp.array, Y: jnp.array):
-        """Compute \nabla_x k(x, y) wrt the first argument.
+        """Compute \\nabla_x k(x, y) wrt the first argument.
         
         :param X: jnp.array of shape (..., n, dim)
         :param Y: jnp.array of shape (..., m, dim)
@@ -55,7 +55,7 @@ class Kernel(object):
         raise NotImplementedError
 
     def grad_second(self, X: jnp.array, Y: jnp.array):
-        """Compute \nabla_x k(x, y) wrt the first argument.
+        """Compute \\nabla_x k(x, y) wrt the first argument.
 
         :param X: jnp.array of shape (..., n, dim)
         :param Y: jnp.array of shape (..., m, dim)
@@ -65,7 +65,7 @@ class Kernel(object):
         raise NotImplementedError
 
     def gradgrad(self, X: jnp.array, Y: jnp.array):
-        """Compute \nabla_x^\top \nabla_y k(x, y).
+        """Compute \\nabla_x^\\top \\nabla_y k(x, y).
 
         :param X: jnp.array of shape (..., n, dim)
         :param Y: jnp.array of shape (..., m, dim)
@@ -75,12 +75,12 @@ class Kernel(object):
         raise NotImplementedError
 
 class RBF(Kernel):
-    """RBF kernel k(x, y) = exp(-\|x - y\|_2^2 / \sigma^2)
+    """RBF kernel k(x, y) = exp(-\\|x - y\\|_2^2 / \\sigma^2)
     """
 
     def __init__(self, sigma_sq: float = None, med_heuristic: bool = False, scale: float = 1., X: jnp.array = None, Y: jnp.array = None):
         """
-        :param sigma_sq: float, squared bandwidth parameter \sigma^2
+        :param sigma_sq: float, squared bandwidth parameter \\sigma^2
         :param med_heuristic: bool, whether to use median heuristic for bandwidth. If True,
             X, Y must be provided to compute the median heuristic.
         :param X: jnp.array of shape (..., n, dim)
@@ -136,12 +136,12 @@ class RBF(Kernel):
         return self.scale * gradgrad_tr
 
 class IMQ(Kernel):
-    """IMQ kernel k(x, y) = (1 + \|x - y\|_2^2 / \sigma^2)^\beta
+    """IMQ kernel k(x, y) = (1 + \\|x - y\\|_2^2 / \\sigma^2)^\\beta
     """
 
     def __init__(self, sigma_sq: float = None, beta: float = -0.5, med_heuristic: bool = False, X: jnp.array = None, Y: jnp.array = None):
         """
-        :param sigma_sq: float, squared bandwidth parameter \sigma^2
+        :param sigma_sq: float, squared bandwidth parameter \\sigma^2
         :param med_heuristic: bool, whether to use median heuristic for bandwidth. If True,
             X, Y must be provided to compute the median heuristic.
         :param X: jnp.array of shape (..., n, dim)
@@ -198,7 +198,7 @@ class IMQ(Kernel):
         return gradgrad_tr
 
 class SumKernel(Kernel):
-    """Sum of kernels k(x, y) = \sum_{l=1}^L k_l(x, y).
+    """Sum of kernels k(x, y) = \\sum_{l=1}^L k_l(x, y).
     """
     
     def __init__(self, kernels):
@@ -303,7 +303,7 @@ class TiltedKernel(Kernel):
         return term1 + term2 + term3 + term4
 
 class WeightFunction(object):
-    """Weighting function w: R^d \to [0, \infty)
+    """Weighting function w: R^d \\to [0, \\infty)
     """
 
     def __call__(self, X: jnp.array):
@@ -321,7 +321,7 @@ class WeightFunction(object):
         raise NotImplementedError
 
 class PolyWeightFunction(WeightFunction):
-    """Polynomial weighting function w(x) = (1 + \|x - loc\|_2^2 / a^2)^(-b)
+    """Polynomial weighting function w(x) = (1 + \\|x - loc\\|_2^2 / a^2)^(-b)
     """
 
     def __init__(self, b: float = 0.5, loc: float = 0., a: float = 1.):
